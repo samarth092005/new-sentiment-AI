@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+scikit-learn
+firebase-admin
+google-generativeai
+nltk
+spacy
+reportlab
+python-dotenv
+pydantic
