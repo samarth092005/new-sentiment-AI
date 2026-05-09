@@ -1,6 +1,7 @@
 # Python
-_pycache_/
+__pycache__/
 *.pyc
+venv/
 
 # Environment files
 .env
@@ -17,16 +18,18 @@ uploads/
 # Reports
 reports/
 
+# Build files
+dist/
+build/
+
+# Firebase
+.firebase/
+
+# Node modules
+node_modules/
+
 # VS Code
 .vscode/
 
 # Streamlit cache
 .streamlit/
-
-#node_modules/
-.env
-venv/
-__pycache__/
-dist/
-build/
-.firebase/

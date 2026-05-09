@@ -7,11 +7,13 @@ class AnalyzeRequest(BaseModel):
 class AnalyzeResponse(BaseModel):
     sentiment: str
     confidence: float
+    department: str
     insights: Dict[str, Any]
 
 class HistoryItem(BaseModel):
     review: str
     sentiment: str
+    department: str
     timestamp: str
     insights: Optional[Dict[str, Any]] = None
 
@@ -21,4 +23,22 @@ class HistoryResponse(BaseModel):
 class ReportRequest(BaseModel):
     review: str
     sentiment: str
+    department: str
     insights: Dict[str, Any]
+
+class BulkAnalyzeRequest(BaseModel):
+    reviews: List[str]
+
+class BulkAnalyzeItem(BaseModel):
+    review: str
+    sentiment: str
+    confidence: float
+    department: str
+
+class BulkAnalyzeResponse(BaseModel):
+    total_reviews: int
+    positive_percent: float
+    negative_percent: float
+    neutral_percent: float
+    common_departments: Dict[str, int]
+    results: List[BulkAnalyzeItem]
