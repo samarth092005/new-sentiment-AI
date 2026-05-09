@@ -22,3 +22,11 @@ reports/
 
 # Streamlit cache
 .streamlit/
+
+#node_modules/
+.env
+venv/
+__pycache__/
+dist/
+build/
+.firebase/

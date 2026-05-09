@@ -1,7 +1,7 @@
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { motion } from 'framer-motion';
-import { TrendingUp, Users, MessageSquareWarning, ArrowUpRight } from 'lucide-react';
+import { TrendingUp, Users, MessageSquare, ArrowUpRight, AlertTriangle } from 'lucide-react';
 
 const sentimentData = [
   { name: 'Positive', value: 65, color: '#22c55e' },
@@ -30,29 +30,29 @@ export default function Dashboard() {
 
         {/* KPI Cards */}
         <div className="grid md:grid-cols-3 gap-6 mb-8">
-          <KpiCard 
-            title="Total Reviews Analyzed" 
-            value="1,284" 
-            trend="+12% this week" 
-            icon={<MessageSquareWarning className="text-blue-500" />} 
+          <KpiCard
+            title="Total Reviews Analyzed"
+            value="1,284"
+            trend="+12% this week"
+            icon={<AlertTriangle className="text-blue-500" />}
           />
-          <KpiCard 
-            title="Avg Sentiment Score" 
-            value="4.2/5" 
-            trend="+0.3 this week" 
-            icon={<TrendingUp className="text-green-500" />} 
+          <KpiCard
+            title="Avg Sentiment Score"
+            value="4.2/5"
+            trend="+0.3 this week"
+            icon={<TrendingUp className="text-green-500" />}
           />
-          <KpiCard 
-            title="Active Users" 
-            value="342" 
-            trend="+5% this week" 
-            icon={<Users className="text-indigo-500" />} 
+          <KpiCard
+            title="Active Users"
+            value="342"
+            trend="+5% this week"
+            icon={<Users className="text-indigo-500" />}
           />
         </div>
 
         {/* Charts */}
         <div className="grid md:grid-cols-3 gap-6">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="glass p-6 rounded-3xl md:col-span-2 border border-slate-200"
@@ -62,9 +62,9 @@ export default function Dashboard() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={trendData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b'}} />
-                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b'}} />
-                  <Tooltip 
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} />
+                  <Tooltip
                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                   />
                   <Bar dataKey="positive" fill="#3b82f6" radius={[4, 4, 0, 0]} />
@@ -74,7 +74,7 @@ export default function Dashboard() {
             </div>
           </motion.div>
 
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
@@ -97,7 +97,7 @@ export default function Dashboard() {
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}/>
+                  <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -118,7 +118,7 @@ export default function Dashboard() {
 
 function KpiCard({ title, value, trend, icon }) {
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col justify-between"
@@ -128,7 +128,7 @@ function KpiCard({ title, value, trend, icon }) {
           {icon}
         </div>
         <div className="flex items-center text-green-600 text-sm font-medium bg-green-50 px-2 py-1 rounded-lg">
-          <ArrowUpRight size={14} className="mr-1"/> {trend}
+          <ArrowUpRight size={14} className="mr-1" /> {trend}
         </div>
       </div>
       <div>
