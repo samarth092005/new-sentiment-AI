@@ -33,3 +33,6 @@ node_modules/
 
 # Streamlit cache
 .streamlit/
+
+#dataset
+backend/data/
