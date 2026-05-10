@@ -30,7 +30,7 @@ export default function Landing() {
           transition={{ duration: 0.8, delay: 0.2 }}
           className="text-xl md:text-2xl text-slate-600 max-w-3xl mx-auto mb-12"
         >
-          Fuzzo uses state-of-the-art Machine Learning and Gemini AI to transform your raw customer feedback into actionable business intelligence.
+          Emovix uses state-of-the-art Machine Learning and Gemini AI to transform your raw customer feedback into actionable business intelligence.
         </motion.p>
 
         <motion.div 

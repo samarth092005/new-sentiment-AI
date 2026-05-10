@@ -42,3 +42,19 @@ class BulkAnalyzeResponse(BaseModel):
     neutral_percent: float
     common_departments: Dict[str, int]
     results: List[BulkAnalyzeItem]
+
+
+class ReviewContext(BaseModel):
+    review: str
+    sentiment: str
+    department: str
+    timestamp: str
+
+
+class AssistantQueryRequest(BaseModel):
+    query: str
+    context: List[ReviewContext]
+
+
+class AssistantQueryResponse(BaseModel):
+    response: str

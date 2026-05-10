@@ -23,7 +23,7 @@ export default function PublicLayout() {
           className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 flex items-center gap-2"
         >
           <ShieldAlert className="text-blue-600" />
-          Fuzzo
+          Emovix
         </Link>
 
         <div className="flex gap-4 items-center">
@@ -47,7 +47,7 @@ export default function PublicLayout() {
       </main>
 
       <footer className="bg-slate-900 text-slate-400 py-8 text-center mt-auto">
-        <p>© 2026 Fuzzo AI Intelligence Platform. MVP Phase 3.</p>
+        <p>© 2026 Emovix AI Intelligence Platform. MVP Phase 4A.</p>
       </footer>
     </div>
   );

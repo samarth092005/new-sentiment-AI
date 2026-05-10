@@ -1,8 +1,12 @@
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import FileResponse
-from api.schemas import AnalyzeRequest, AnalyzeResponse, HistoryItem, HistoryResponse, ReportRequest, BulkAnalyzeRequest, BulkAnalyzeResponse, BulkAnalyzeItem
+from api.schemas import (
+    AnalyzeRequest, AnalyzeResponse, HistoryItem, HistoryResponse,
+    ReportRequest, BulkAnalyzeRequest, BulkAnalyzeResponse, BulkAnalyzeItem,
+    AssistantQueryRequest, AssistantQueryResponse
+)
 from ml.sentiment import analyzer
-from services.gemini import generate_insights
+from services.gemini import generate_insights, generate_assistant_response
 from services.pdf_generator import generate_report
 from utils.classifier import classify_department
 from datetime import datetime
@@ -87,7 +91,25 @@ async def create_report(request: ReportRequest):
         return FileResponse(
             path=filename,
             media_type='application/pdf',
-            filename=f"Fuzzo_Report_{datetime.now().strftime('%Y%m%d')}.pdf"
+            filename=f"Emovix_Report_{datetime.now().strftime('%Y%m%d')}.pdf"
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/assistant/query", response_model=AssistantQueryResponse)
+async def assistant_query(request: AssistantQueryRequest):
+    """
+    Emovix AI Customer Intelligence Copilot endpoint.
+    Accepts a natural language query and structured review context.
+    Returns a Gemini-generated conversational business intelligence answer.
+    """
+    if not request.query.strip():
+        raise HTTPException(status_code=400, detail="Query cannot be empty.")
+
+    # Serialize context list into plain dicts for gemini service
+    context_dicts = [item.model_dump() for item in request.context]
+
+    response_text = generate_assistant_response(request.query, context_dicts)
+
+    return AssistantQueryResponse(response=response_text)

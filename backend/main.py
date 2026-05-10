@@ -3,8 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.routes import router
 
 app = FastAPI(
-    title="Fuzzo API",
-    description="Backend for Fuzzo - AI-Powered Customer Feedback Intelligence Platform",
+    title="Emovix API",
+    description="Backend for Emovix - AI-Powered Customer Feedback Intelligence Platform",
     version="1.0.0"
 )
 
@@ -21,4 +21,4 @@ app.include_router(router, prefix="/api")
 
 @app.get("/")
 def root():
-    return {"message": "Welcome to Fuzzo API"}
+    return {"message": "Welcome to Emovix API"}

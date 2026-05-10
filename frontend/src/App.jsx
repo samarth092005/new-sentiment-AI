@@ -9,6 +9,7 @@ import Analyze from './pages/Analyze';
 import History from './pages/History';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
+import Assistant from './pages/Assistant';
 
 import AuthLayout from './components/layout/AuthLayout';
 import PublicLayout from './components/layout/PublicLayout';
@@ -48,6 +49,7 @@ function App() {
               <Route path="/history" element={<History />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/assistant" element={<Assistant />} />
             </Route>
           </Routes>
         </Router>

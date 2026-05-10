@@ -7,7 +7,8 @@ import {
   MessageSquare, 
   Settings,
   User,
-  ShieldAlert
+  ShieldAlert,
+  Bot
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -15,6 +16,7 @@ export default function Sidebar() {
     { name: 'Dashboard', path: '/dashboard', icon: BarChart3 },
     { name: 'Analyze', path: '/analyze', icon: MessageSquare },
     { name: 'History', path: '/history', icon: HistoryIcon },
+    { name: 'AI Copilot', path: '/assistant', icon: Bot, badge: true },
   ];
 
   const bottomItems = [
@@ -27,7 +29,7 @@ export default function Sidebar() {
       <div className="p-6">
         <NavLink to="/dashboard" className="flex items-center gap-2 text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
           <ShieldAlert className="text-blue-600" />
-          Fuzzo
+          Emovix
         </NavLink>
       </div>
 
@@ -50,7 +52,12 @@ export default function Sidebar() {
             {({ isActive }) => (
               <>
                 <item.icon size={20} className={isActive ? 'text-blue-600' : 'text-slate-400'} />
-                {item.name}
+                <span className="flex-1">{item.name}</span>
+                {item.badge && !isActive && (
+                  <span className="text-[10px] font-bold bg-gradient-to-r from-blue-500 to-indigo-500 text-white px-1.5 py-0.5 rounded-full leading-none">
+                    NEW
+                  </span>
+                )}
                 {isActive && (
                   <motion.div 
                     layoutId="active-indicator"
