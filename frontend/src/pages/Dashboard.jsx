@@ -4,7 +4,8 @@ import { motion } from 'framer-motion';
 import { TrendingUp, Users, MessageSquare, ArrowUpRight, AlertTriangle, Layers } from 'lucide-react';
 import AlertCard from '../components/AlertCard';
 import { collection, getDocs } from 'firebase/firestore';
-import { db } from '../firebase/config'; // Assume firebase is connected
+import { db } from '../firebase/config';
+import GlobalLoader from '../components/ui/GlobalLoader';
 
 const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f43f5e', '#f97316', '#eab308'];
 
@@ -105,6 +106,10 @@ export default function Dashboard() {
       title: 'Support Team Bottleneck',
       message: 'Customer support complaints are unusually high this week.'
     });
+  }
+
+  if (loading) {
+    return <GlobalLoader isLoading={true} text="Compiling dashboard metrics..." />;
   }
 
   return (

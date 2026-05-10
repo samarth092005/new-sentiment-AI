@@ -4,7 +4,9 @@ import { Send, Bot, CheckCircle2, AlertCircle, Loader2, FileText, Database } fro
 import axios from 'axios';
 import CsvUploader from '../components/CsvUploader';
 import { collection, addDoc } from 'firebase/firestore';
-import { db } from '../firebase/config'; // Assume user has this exported
+import { db } from '../firebase/config';
+import GlobalLoader from '../components/ui/GlobalLoader';
+import EmptyState from '../components/ui/EmptyState';
 
 function TypewriterText({ text }) {
   const [displayedText, setDisplayedText] = useState('');
@@ -186,19 +188,15 @@ export default function Analyze() {
           transition={{ duration: 0.5, delay: 0.2 }}
           className="relative h-full min-h-[500px]"
         >
-          {loading && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 backdrop-blur-md rounded-3xl z-10 border border-slate-200">
-              <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
-              <p className="text-slate-600 font-medium animate-pulse">
-                {mode === 'single' ? 'Running ML pipeline & Gemini AI...' : 'Processing Bulk Data...'}
-              </p>
-            </div>
-          )}
+          <GlobalLoader isLoading={loading} text={mode === 'single' ? 'Running ML pipeline & Gemini AI...' : 'Processing Bulk Data...'} />
 
           {!result && !bulkResult && !loading && (
-            <div className="h-full flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-200 rounded-3xl p-8 text-center bg-white/30">
-              <Bot className="w-16 h-16 mb-4 opacity-50" />
-              <p>Results and AI insights will appear here.</p>
+            <div className="h-full flex flex-col items-center justify-center p-8">
+              <EmptyState 
+                icon={Bot} 
+                title="Ready for Analysis" 
+                description="Results and AI insights will appear here once you submit your feedback or upload a CSV." 
+              />
             </div>
           )}
 

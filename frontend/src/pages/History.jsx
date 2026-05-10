@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Calendar, CheckCircle2, AlertCircle, ChevronDown, ChevronUp, Clock, FileText, Database } from 'lucide-react';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
-import { db } from '../firebase/config'; // Assume firebase is connected
+import { Search, Calendar, CheckCircle2, AlertCircle, ChevronDown, ChevronUp, Clock, FileText, Database, Filter, Trash2 } from 'lucide-react';
+import { collection, getDocs, query, orderBy, deleteDoc, doc } from 'firebase/firestore';
+import { db } from '../firebase/config';
+import EmptyState from '../components/ui/EmptyState';
+import GlobalLoader from '../components/ui/GlobalLoader';
+import toast from 'react-hot-toast';
 
 export default function History() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [sentimentFilter, setSentimentFilter] = useState('All');
   const [historyData, setHistoryData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
@@ -54,13 +58,33 @@ export default function History() {
   }, []);
 
   const filteredHistory = historyData.filter(item => {
-    if (item.type === 'bulk') return true; // Could filter bulk by date later
-    return (
-      (item.review && item.review.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (item.sentiment && item.sentiment.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (item.department && item.department.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
+    let matchesSearch = true;
+    let matchesSentiment = true;
+
+    if (item.type === 'bulk') {
+      matchesSearch = true; // Bulk could be matched by other things later
+    } else {
+      matchesSearch = (item.review && item.review.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (item.department && item.department.toLowerCase().includes(searchTerm.toLowerCase()));
+      
+      if (sentimentFilter !== 'All') {
+        matchesSentiment = item.sentiment === sentimentFilter;
+      }
+    }
+
+    return matchesSearch && matchesSentiment;
   });
+
+  const handleDelete = async (id) => {
+    try {
+      await deleteDoc(doc(db, 'history', id));
+      setHistoryData(prev => prev.filter(item => item.id !== id));
+      toast.success('Record deleted successfully');
+    } catch (err) {
+      console.error("Error deleting document:", err);
+      toast.error('Failed to delete record');
+    }
+  };
 
   return (
     <div className="flex-grow bg-slate-50 p-8">
@@ -71,26 +95,45 @@ export default function History() {
             <p className="text-slate-500 mt-2">Track the history of processed customer intelligence.</p>
           </div>
           
-          <div className="relative w-full md:w-80">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-            <input 
-              type="text" 
-              placeholder="Search reviews or sentiment..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all shadow-sm"
-            />
+          <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
+            <div className="relative w-full md:w-80">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+              <input 
+                type="text" 
+                placeholder="Search reviews..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all shadow-sm"
+              />
+            </div>
+            <div className="relative">
+              <select 
+                value={sentimentFilter}
+                onChange={(e) => setSentimentFilter(e.target.value)}
+                className="appearance-none pl-4 pr-10 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none bg-white shadow-sm font-medium text-slate-700"
+              >
+                <option value="All">All Sentiments</option>
+                <option value="Positive">Positive</option>
+                <option value="Neutral">Neutral</option>
+                <option value="Negative">Negative</option>
+              </select>
+              <Filter className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
+            </div>
           </div>
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          </div>
+          <GlobalLoader isLoading={true} text="Loading history..." />
         ) : (
-          <div className="relative border-l border-slate-200 ml-4 md:ml-6 space-y-8 pb-10">
+          <div className="relative border-l-2 border-slate-200 ml-4 md:ml-6 space-y-8 pb-10">
             {filteredHistory.length === 0 ? (
-              <p className="text-slate-500 ml-8">No analysis history found.</p>
+              <div className="pl-8 pt-4">
+                <EmptyState 
+                  icon={Search} 
+                  title="No history found" 
+                  description="We couldn't find any analysis records matching your criteria. Try adjusting your search or filters." 
+                />
+              </div>
             ) : (
               filteredHistory.map((item, index) => (
                 <HistoryCard 
@@ -99,6 +142,7 @@ export default function History() {
                   index={index}
                   isExpanded={expandedId === item.id}
                   onToggle={() => setExpandedId(expandedId === item.id ? null : item.id)}
+                  onDelete={() => handleDelete(item.id)}
                 />
               ))
             )}
@@ -109,7 +153,7 @@ export default function History() {
   );
 }
 
-function HistoryCard({ item, index, isExpanded, onToggle }) {
+function HistoryCard({ item, index, isExpanded, onToggle, onDelete }) {
   const isBulk = item.type === 'bulk';
   
   return (
@@ -166,11 +210,23 @@ function HistoryCard({ item, index, isExpanded, onToggle }) {
             </div>
           </div>
           
-          {!isBulk && (
-            <button className="text-slate-400 hover:text-blue-600 transition-colors p-2 rounded-full hover:bg-slate-50 flex-shrink-0">
-              {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              className="text-slate-400 hover:text-red-500 transition-colors p-2 rounded-full hover:bg-red-50"
+              title="Delete Record"
+            >
+              <Trash2 size={18} />
             </button>
-          )}
+            {!isBulk && (
+              <button className="text-slate-400 hover:text-blue-600 transition-colors p-2 rounded-full hover:bg-blue-50">
+                {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+              </button>
+            )}
+          </div>
         </div>
 
         <AnimatePresence>

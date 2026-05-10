@@ -1,155 +1,58 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
-
-import {
-  ShieldAlert,
-  BarChart3,
-  History as HistoryIcon,
-  LogIn
-} from 'lucide-react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
 
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Analyze from './pages/Analyze';
 import History from './pages/History';
+import Profile from './pages/Profile';
+import Settings from './pages/Settings';
 
-import ProtectedRoute from './components/ProtectedRoute';
+import AuthLayout from './components/layout/AuthLayout';
+import PublicLayout from './components/layout/PublicLayout';
 
-import { signOut } from "firebase/auth";
-import { auth } from "./firebase/config";
+import { AuthProvider } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
 
 function App() {
-
-  const user = auth.currentUser;
-
-  const handleLogout = async () => {
-
-    await signOut(auth);
-
-    window.location.href = "/login";
-  };
-
   return (
-
-    <Router>
-
-      <div className="min-h-screen flex flex-col font-sans">
-
-        <nav className="glass sticky top-0 z-50 px-6 py-4 flex justify-between items-center">
-
-          <Link
-            to="/"
-            className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 flex items-center gap-2"
-          >
-            <ShieldAlert className="text-blue-600" />
-            Fuzzo
-          </Link>
-
-          <div className="flex gap-6 items-center">
-
-            <Link
-              to="/analyze"
-              className="text-slate-600 hover:text-blue-600 font-medium transition-colors"
-            >
-              Analyze
-            </Link>
-
-            <Link
-              to="/dashboard"
-              className="text-slate-600 hover:text-blue-600 font-medium transition-colors flex items-center gap-1"
-            >
-              <BarChart3 size={18} />
-              Dashboard
-            </Link>
-
-            <Link
-              to="/history"
-              className="text-slate-600 hover:text-blue-600 font-medium transition-colors flex items-center gap-1"
-            >
-              <HistoryIcon size={18} />
-              History
-            </Link>
-
-            {
-              user ? (
-
-                <button
-                  onClick={handleLogout}
-                  className="bg-red-500 text-white px-5 py-2 rounded-full hover:bg-red-600 transition-colors shadow-md"
-                >
-                  Logout
-                </button>
-
-              ) : (
-
-                <Link
-                  to="/login"
-                  className="bg-blue-600 text-white px-5 py-2 rounded-full hover:bg-blue-700 transition-colors shadow-md flex items-center gap-2"
-                >
-                  <LogIn size={18} />
-                  Login
-                </Link>
-
-              )
-            }
-
-          </div>
-
-        </nav>
-
-        <main className="flex-grow flex flex-col">
-
+    <ThemeProvider>
+      <AuthProvider>
+        <Router>
+          <Toaster 
+            position="top-right"
+            toastOptions={{
+              duration: 3000,
+              style: {
+                background: '#fff',
+                color: '#334155',
+                boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                borderRadius: '12px',
+                border: '1px solid #f1f5f9'
+              },
+            }}
+          />
           <Routes>
+            {/* Public Routes */}
+            <Route element={<PublicLayout />}>
+              <Route path="/" element={<Landing />} />
+              <Route path="/login" element={<Login />} />
+            </Route>
 
-            <Route
-              path="/"
-              element={<Landing />}
-            />
-
-            <Route
-              path="/login"
-              element={<Login />}
-            />
-
-            <Route
-              path="/dashboard"
-              element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
-              }
-            />
-
-            <Route
-              path="/analyze"
-              element={
-                <ProtectedRoute>
-                  <Analyze />
-                </ProtectedRoute>
-              }
-            />
-
-            <Route
-              path="/history"
-              element={
-                <ProtectedRoute>
-                  <History />
-                </ProtectedRoute>
-              }
-            />
-
+            {/* Authenticated Routes */}
+            <Route element={<AuthLayout />}>
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/analyze" element={<Analyze />} />
+              <Route path="/history" element={<History />} />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/settings" element={<Settings />} />
+            </Route>
           </Routes>
-
-        </main>
-
-        <footer className="bg-slate-900 text-slate-400 py-8 text-center">
-          <p>© 2026 Fuzzo AI Intelligence Platform. MVP Phase 1.</p>
-        </footer>
-
-      </div>
-
-    </Router>
+        </Router>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 
