@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Send, Bot, CheckCircle2, AlertCircle, Loader2, FileText, Database } from 'lucide-react';
+import { Send, Bot, CheckCircle2, AlertCircle, Loader2, FileText, Database, BrainCircuit, ChevronRight, Lightbulb } from 'lucide-react';
 import axios from 'axios';
 import CsvUploader from '../components/CsvUploader';
 import { collection, addDoc } from 'firebase/firestore';
@@ -29,12 +29,15 @@ function TypewriterText({ text }) {
 }
 
 export default function Analyze() {
-  const [mode, setMode] = useState('single'); // 'single' or 'bulk'
+  const [mode, setMode] = useState('single');
   const [review, setReview] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [bulkResult, setBulkResult] = useState(null);
   const [error, setError] = useState(null);
+  // Phase 4D — AI intelligence for bulk
+  const [bulkIntelligence, setBulkIntelligence] = useState(null);
+  const [bulkAiLoading, setBulkAiLoading] = useState(false);
 
   const saveToFirestore = async (data, isBulk = false) => {
     try {
@@ -108,11 +111,10 @@ export default function Analyze() {
     setError(null);
     setResult(null);
     setBulkResult(null);
+    setBulkIntelligence(null);
 
     try {
-      const response = await axios.post('http://localhost:8000/api/analyze/bulk', {
-        reviews
-      });
+      const response = await axios.post('http://localhost:8000/api/analyze/bulk', { reviews });
       setBulkResult(response.data);
       saveToFirestore(response.data, true);
     } catch (err) {
@@ -120,6 +122,25 @@ export default function Analyze() {
       setError('Failed to process bulk upload. Backend might be down.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleBulkIntelligence = async () => {
+    if (!bulkResult?.results?.length) return;
+    setBulkAiLoading(true);
+    try {
+      const ctx = bulkResult.results.slice(0, 25).map(r => ({
+        review:     r.review?.substring(0, 220) || '',
+        sentiment:  r.sentiment  || 'Neutral',
+        department: r.department || 'General',
+        timestamp:  new Date().toISOString(),
+      }));
+      const res = await axios.post('http://localhost:8000/api/intelligence/dashboard', { context: ctx });
+      setBulkIntelligence(res.data);
+    } catch (err) {
+      console.error('Bulk intelligence error:', err);
+    } finally {
+      setBulkAiLoading(false);
     }
   };
 
@@ -330,7 +351,7 @@ export default function Analyze() {
                 ))}
               </div>
 
-              <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-start gap-3">
+              <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-start gap-3 mb-4">
                 <FileText className="text-blue-600 mt-1" />
                 <div>
                   <h4 className="font-semibold text-blue-900">Dashboard Updated</h4>
@@ -339,6 +360,58 @@ export default function Analyze() {
                   </p>
                 </div>
               </div>
+
+              {/* 4D — AI Intelligence Report */}
+              {!bulkIntelligence && (
+                <button
+                  onClick={handleBulkIntelligence}
+                  disabled={bulkAiLoading}
+                  className="w-full py-3 flex items-center justify-center gap-2 bg-gradient-to-r from-slate-900 to-indigo-900 text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-indigo-900/30 transition-all disabled:opacity-50"
+                >
+                  {bulkAiLoading
+                    ? <><Loader2 size={18} className="animate-spin" /> Generating Intelligence Report…</>
+                    : <><BrainCircuit size={18} /> Generate AI Intelligence Report</>
+                  }
+                </button>
+              )}
+
+              {bulkIntelligence && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-2 bg-gradient-to-br from-slate-900 to-indigo-950 rounded-2xl p-6 text-white"
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <BrainCircuit size={18} className="text-blue-400" />
+                    <span className="text-xs font-bold text-blue-300 uppercase tracking-wider">AI Intelligence Report</span>
+                  </div>
+                  <p className="text-white/85 text-sm leading-relaxed mb-4">{bulkIntelligence.executive_summary}</p>
+                  {bulkIntelligence.top_issues?.length > 0 && (
+                    <div className="mb-4">
+                      <p className="text-xs font-bold text-slate-400 uppercase mb-2">Top Issues</p>
+                      <ul className="space-y-1.5">
+                        {bulkIntelligence.top_issues.map((iss, i) => (
+                          <li key={i} className="flex items-center gap-2 text-xs text-white/70">
+                            <span className="w-1.5 h-1.5 rounded-full bg-orange-400 flex-shrink-0" />{iss}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {bulkIntelligence.recommendations?.length > 0 && (
+                    <div>
+                      <p className="text-xs font-bold text-slate-400 uppercase mb-2">Recommendations</p>
+                      <ul className="space-y-1.5">
+                        {bulkIntelligence.recommendations.map((rec, i) => (
+                          <li key={i} className="flex items-start gap-2 text-xs text-blue-200/80">
+                            <ChevronRight size={13} className="mt-0.5 flex-shrink-0" />{rec}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </motion.div>
+              )}
             </motion.div>
           )}
 

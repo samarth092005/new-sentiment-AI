@@ -3,10 +3,11 @@ from fastapi.responses import FileResponse
 from api.schemas import (
     AnalyzeRequest, AnalyzeResponse, HistoryItem, HistoryResponse,
     ReportRequest, BulkAnalyzeRequest, BulkAnalyzeResponse, BulkAnalyzeItem,
-    AssistantQueryRequest, AssistantQueryResponse
+    AssistantQueryRequest, AssistantQueryResponse,
+    DashboardIntelligenceRequest, DashboardIntelligenceResponse, DashboardAlert
 )
 from ml.sentiment import analyzer
-from services.gemini import generate_insights, generate_assistant_response
+from services.gemini import generate_insights, generate_assistant_response, generate_dashboard_intelligence
 from services.pdf_generator import generate_report
 from utils.classifier import classify_department
 from datetime import datetime
@@ -113,3 +114,32 @@ async def assistant_query(request: AssistantQueryRequest):
     response_text = generate_assistant_response(request.query, context_dicts)
 
     return AssistantQueryResponse(response=response_text)
+
+
+@router.post("/intelligence/dashboard", response_model=DashboardIntelligenceResponse)
+async def dashboard_intelligence(request: DashboardIntelligenceRequest):
+    """
+    Emovix AI Dashboard Intelligence (Phase 4B/4C/4D).
+    Accepts structured review context from the frontend.
+    Returns executive summary, top issues, recommendations, alerts, and risk level.
+    """
+    context_dicts = [item.model_dump() for item in request.context]
+    data = generate_dashboard_intelligence(context_dicts)
+
+    alerts = [
+        DashboardAlert(
+            title=a.get("title", "Alert"),
+            message=a.get("message", ""),
+            severity=a.get("severity", "low")
+        )
+        for a in data.get("alerts", [])
+    ]
+
+    return DashboardIntelligenceResponse(
+        executive_summary=data.get("executive_summary", ""),
+        top_issues=data.get("top_issues", []),
+        recommendations=data.get("recommendations", []),
+        department_risk=data.get("department_risk", ""),
+        alerts=alerts,
+        risk_level=data.get("risk_level", "low")
+    )

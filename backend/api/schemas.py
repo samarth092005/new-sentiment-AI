@@ -58,3 +58,24 @@ class AssistantQueryRequest(BaseModel):
 
 class AssistantQueryResponse(BaseModel):
     response: str
+
+
+# ── Phase 4B/4C/4D: Dashboard Intelligence ───────────────────────────────────
+
+class DashboardAlert(BaseModel):
+    title: str
+    message: str
+    severity: str  # low | medium | high | critical
+
+
+class DashboardIntelligenceRequest(BaseModel):
+    context: List[ReviewContext]  # reuses existing schema
+
+
+class DashboardIntelligenceResponse(BaseModel):
+    executive_summary: str
+    top_issues: List[str]
+    recommendations: List[str]
+    department_risk: str
+    alerts: List[DashboardAlert]
+    risk_level: str  # low | medium | high | critical

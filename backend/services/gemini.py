@@ -162,3 +162,104 @@ Deliver a sharp, executive-grade intelligence response:"""
             "The intelligence engine is temporarily unavailable. "
             "Please verify your API key configuration and try again shortly."
         )
+
+
+def generate_dashboard_intelligence(context: list) -> dict:
+    """
+    Emovix AI Dashboard Intelligence Engine (Phase 4B/4C/4D).
+    Generates structured executive business intelligence from review history.
+    Returns JSON: executive_summary, top_issues, recommendations,
+                  department_risk, alerts, risk_level.
+    """
+    _empty = {
+        "executive_summary": "No review data is currently available. Analyze customer reviews to unlock AI intelligence insights.",
+        "top_issues": [],
+        "recommendations": ["Process customer reviews to generate operational recommendations."],
+        "department_risk": "Insufficient data to assess department risk.",
+        "alerts": [],
+        "risk_level": "low"
+    }
+
+    if not context:
+        return _empty
+
+    total = len(context)
+
+    # Sentiment distribution
+    sent_counts: dict = {}
+    for item in context:
+        s = item.get("sentiment", "Unknown")
+        sent_counts[s] = sent_counts.get(s, 0) + 1
+
+    neg_pct = round(sent_counts.get("Negative", 0) / total * 100)
+    pos_pct = round(sent_counts.get("Positive", 0) / total * 100)
+    sentiment_summary = ", ".join(
+        f"{s}: {c} ({round(c/total*100)}%)"
+        for s, c in sorted(sent_counts.items(), key=lambda x: -x[1])
+    )
+
+    # Department frequency
+    dept_counts: dict = {}
+    for item in context:
+        d = item.get("department", "General")
+        dept_counts[d] = dept_counts.get(d, 0) + 1
+
+    top_depts = sorted(dept_counts.items(), key=lambda x: -x[1])
+    dept_summary = ", ".join(f"{d} ({c})" for d, c in top_depts[:5])
+
+    # Date range
+    ts = [item.get("timestamp", "")[:10] for item in context if item.get("timestamp")]
+    date_range = f"{min(ts)} to {max(ts)}" if ts else "Unknown"
+
+    # Format reviews compactly
+    review_block = "\n".join(
+        f"[{i}] {item.get('sentiment','N/A')} | {item.get('department','General')} | \"{item.get('review','')[:180]}\""
+        for i, item in enumerate(context, 1)
+    )
+
+    prompt = f"""SYSTEM ROLE:
+You are the Emovix Dashboard Intelligence Engine — a senior customer analytics AI that generates executive-grade business intelligence from review data.
+
+TASK:
+Analyze the customer review dataset and return a complete intelligence report as valid JSON.
+
+QUALITY STANDARDS:
+- Be specific and grounded — reference actual complaint themes visible in the reviews.
+- Sound like a senior analyst briefing an executive team.
+- Identify the top 3–5 real complaint categories present in the data.
+- Generate specific, actionable operational recommendations.
+- Flag genuine risks — do not downplay high negative rates.
+- If negative sentiment > 30%, risk_level should be "high" or "critical".
+- Alerts should be specific and reference actual patterns from the reviews.
+- Severity: "low" | "medium" | "high" | "critical"
+- Do NOT add generic filler — every sentence must reflect actual data.
+
+DATASET ({total} reviews | {date_range}):
+Sentiment  : {sentiment_summary}
+Departments: {dept_summary}
+Negative % : {neg_pct}% | Positive %: {pos_pct}%
+
+REVIEWS:
+{review_block}
+
+Return ONLY valid JSON — no markdown, no extra text:
+{{
+  "executive_summary": "2-3 sentence executive intelligence summary",
+  "top_issues": ["Issue 1", "Issue 2", "Issue 3"],
+  "recommendations": ["Recommendation 1", "Recommendation 2", "Recommendation 3"],
+  "department_risk": "Short sentence on highest-risk department and why",
+  "alerts": [
+    {{"title": "Alert title", "message": "Specific alert detail", "severity": "high"}},
+    {{"title": "Alert title", "message": "Specific alert detail", "severity": "medium"}}
+  ],
+  "risk_level": "medium"
+}}"""
+
+    try:
+        response = model.generate_content(prompt)
+        raw = response.text.strip().replace("```json", "").replace("```", "").strip()
+        return json.loads(raw)
+    except Exception as e:
+        print("GEMINI INTELLIGENCE ERROR:", e)
+        _empty["executive_summary"] = f"AI analysis encountered an error. Manual review of {total} records recommended."
+        return _empty
