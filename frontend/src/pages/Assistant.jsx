@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
-import { db } from '../firebase/config';
-import { Bot, User, Send, Sparkles, Loader2, AlertCircle } from 'lucide-react';
+import { collection, getDocs, query, orderBy, limit, where } from 'firebase/firestore';
+import { db, auth } from '../firebase/config';
+import { Bot, User, Send, Sparkles, RefreshCw, AlertCircle } from 'lucide-react';
 import axios from 'axios';
 
 const SUGGESTED_PROMPTS = [
@@ -12,6 +12,7 @@ const SUGGESTED_PROMPTS = [
   { icon: '📈', text: 'What trends do you notice in customer feedback?' },
 ];
 
+// ── Animated typing dots ──────────────────────────────────────────────────────
 function TypingDots() {
   return (
     <div className="flex items-center gap-1.5 py-1 px-1">
@@ -27,6 +28,7 @@ function TypingDots() {
   );
 }
 
+// ── Typewriter text ───────────────────────────────────────────────────────────
 function TypewriterText({ text }) {
   const [displayed, setDisplayed] = useState('');
   useEffect(() => {
@@ -43,86 +45,107 @@ function TypewriterText({ text }) {
   return <span>{displayed}</span>;
 }
 
+// ── Main component ────────────────────────────────────────────────────────────
 export default function Assistant() {
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
-  const [isThinking, setIsThinking] = useState(false);
+  const [messages, setMessages]         = useState([]);
+  const [input, setInput]               = useState('');
+  const [isThinking, setIsThinking]     = useState(false);
   const [contextLoaded, setContextLoaded] = useState(false);
   const [reviewContext, setReviewContext] = useState([]);
-  const [contextError, setContextError] = useState(false);
+  const [contextError, setContextError]  = useState(false);
   const bottomRef = useRef(null);
-  const inputRef = useRef(null);
+  const inputRef  = useRef(null);
 
-  // Fetch and compact recent review context from Firestore on mount
-  useEffect(() => {
-    const fetchContext = async () => {
-      try {
-        const q = query(
-          collection(db, 'history'),
-          orderBy('timestamp', 'desc'),
-          limit(30)
-        );
-        const snap = await getDocs(q);
-        const records = [];
-        snap.forEach((doc) => {
-          const d = doc.data();
-          // Only include single reviews with core fields; skip sparse bulk entries
-          if (d.type === 'single' && d.review && d.sentiment) {
-            records.push({
-              review: d.review.substring(0, 250), // keep compact
-              sentiment: d.sentiment,
-              department: d.department || 'General',
-              timestamp: d.timestamp || new Date().toISOString(),
-            });
-          }
-        });
-        setReviewContext(records);
-        setContextLoaded(true);
-      } catch (err) {
-        console.error('Failed to fetch review context:', err);
-        setContextError(true);
-        setContextLoaded(true);
-      }
-    };
-    fetchContext();
-  }, []);
+  // ── Fetch review context (UID-scoped) ───────────────────────────────────
+  const fetchContext = async () => {
+    setContextError(false);
+    setContextLoaded(false);
 
-  // Auto-scroll to bottom whenever messages change
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      setContextLoaded(true);
+      return;
+    }
+
+    try {
+      const q = query(
+        collection(db, 'history'),
+        where('uid', '==', uid),
+        orderBy('timestamp', 'desc'),
+        limit(30)
+      );
+      const snap = await getDocs(q);
+      const records = [];
+      snap.forEach((doc) => {
+        const d = doc.data();
+        if (d.type === 'single' && d.review && d.sentiment) {
+          records.push({
+            review:     d.review.substring(0, 250),
+            sentiment:  d.sentiment,
+            department: d.department || 'General',
+            timestamp:  d.timestamp || new Date().toISOString(),
+          });
+        }
+      });
+      setReviewContext(records);
+      setContextLoaded(true);
+    } catch (err) {
+      console.error('[Assistant] Failed to fetch review context:', err);
+      setContextError(true);
+      setContextLoaded(true);
+    }
+  };
+
+  useEffect(() => { fetchContext(); }, []);
+
+  // Auto-scroll to bottom
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isThinking]);
 
-  const sendMessage = async (text) => {
+  // ── Send message ─────────────────────────────────────────────────────────
+  const sendMessage = async (text, retryMsgId = null) => {
     const trimmed = text.trim();
     if (!trimmed || isThinking) return;
 
-    const userMsg = { role: 'user', text: trimmed, id: Date.now() };
-    setMessages((prev) => [...prev, userMsg]);
+    // If not a retry, add the user message
+    if (!retryMsgId) {
+      const userMsg = { role: 'user', text: trimmed, id: Date.now() };
+      setMessages((prev) => [...prev, userMsg]);
+    }
+
     setInput('');
     setIsThinking(true);
 
+    // If retry, remove the previous error message
+    if (retryMsgId) {
+      setMessages((prev) => prev.filter((m) => m.id !== retryMsgId));
+    }
+
     try {
       const res = await axios.post('http://localhost:8000/api/assistant/query', {
-        query: trimmed,
+        query:   trimmed,
         context: reviewContext,
       });
       const aiMsg = {
-        role: 'ai',
-        text: res.data.response,
-        id: Date.now() + 1,
+        role:  'ai',
+        text:  res.data.response,
+        id:    Date.now() + 1,
         isNew: true,
+        query: trimmed,  // store for retry
       };
       setMessages((prev) => [...prev, aiMsg]);
     } catch (err) {
-      console.error('Assistant error:', err);
+      console.error('[Assistant] Request failed:', err);
       setMessages((prev) => [
         ...prev,
         {
-          role: 'ai',
-          text: "I'm having trouble connecting to the intelligence engine right now. Please ensure the backend is running and try again.",
-          id: Date.now() + 1,
-          isNew: true,
+          role:    'ai',
+          text:    trimmed,          // store original query for retry
+          id:      Date.now() + 1,
+          isNew:   false,
           isError: true,
+          query:   trimmed,
         },
       ]);
     } finally {
@@ -138,29 +161,37 @@ export default function Assistant() {
 
   const isEmpty = messages.length === 0;
 
+  // ── Status indicator label ────────────────────────────────────────────────
+  const statusLabel = () => {
+    if (!contextLoaded) return 'Loading review context…';
+    if (contextError)   return 'Context unavailable — tap to retry';
+    if (reviewContext.length === 0) return 'No reviews found — analyze feedback first';
+    return `Ready · ${reviewContext.length} recent review${reviewContext.length !== 1 ? 's' : ''} loaded`;
+  };
+
   return (
     <div className="flex flex-col h-full bg-slate-50">
-      {/* Header */}
+
+      {/* ── Header ───────────────────────────────────────────────────────── */}
       <div className="bg-white border-b border-slate-200 px-8 py-5 flex items-center gap-4 flex-shrink-0">
         <div className="p-2.5 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl shadow-md shadow-blue-500/20">
           <Bot size={22} className="text-white" />
         </div>
-        <div>
+        <div className="flex-1 min-w-0">
           <h2 className="text-lg font-bold text-slate-800">Emovix AI Copilot</h2>
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-            <p className="text-xs text-slate-500">
-              {contextLoaded
-                ? contextError
-                  ? 'Context unavailable — check Firestore connection'
-                  : `Ready · Loaded ${reviewContext.length} recent review${reviewContext.length !== 1 ? 's' : ''}`
-                : 'Loading review context…'}
-            </p>
+            <span className={`w-2 h-2 rounded-full animate-pulse ${contextError ? 'bg-amber-400' : 'bg-green-400'}`} />
+            <button
+              onClick={contextError ? fetchContext : undefined}
+              className={`text-xs text-slate-500 truncate ${contextError ? 'underline underline-offset-2 cursor-pointer hover:text-slate-700' : 'cursor-default'}`}
+            >
+              {statusLabel()}
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Message Area */}
+      {/* ── Message Area ─────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
         <AnimatePresence>
           {isEmpty ? (
@@ -226,12 +257,22 @@ export default function Assistant() {
                       ? 'bg-red-50 text-red-700 border border-red-100 rounded-tl-sm'
                       : 'bg-white text-slate-700 border border-slate-100 rounded-tl-sm'
                 }`}>
-                  {msg.isError && (
-                    <div className="flex items-center gap-1.5 mb-1.5 text-red-500 font-medium text-xs">
-                      <AlertCircle size={13} /> Connection error
+                  {msg.isError ? (
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-2 text-red-500 font-medium text-xs">
+                        <AlertCircle size={13} /> Intelligence temporarily unavailable
+                      </div>
+                      <p className="text-red-600 text-xs mb-3">
+                        The AI Intelligence Engine is temporarily operating at reduced capacity. Please try again.
+                      </p>
+                      <button
+                        onClick={() => sendMessage(msg.query, msg.id)}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-red-600 hover:text-red-800 underline underline-offset-2"
+                      >
+                        <RefreshCw size={11} /> Retry Response
+                      </button>
                     </div>
-                  )}
-                  {msg.role === 'ai' && msg.isNew ? (
+                  ) : msg.role === 'ai' && msg.isNew ? (
                     <TypewriterText text={msg.text} />
                   ) : (
                     msg.text
@@ -262,9 +303,8 @@ export default function Assistant() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input Area */}
+      {/* ── Input Area ───────────────────────────────────────────────────── */}
       <div className="bg-white border-t border-slate-200 px-6 py-4 flex-shrink-0">
-        {/* Suggested prompts row (visible after conversation starts) */}
         {!isEmpty && (
           <div className="flex gap-2 mb-3 overflow-x-auto pb-1 scrollbar-hide">
             {SUGGESTED_PROMPTS.map((p) => (
@@ -297,11 +337,10 @@ export default function Assistant() {
             whileTap={{ scale: 0.95 }}
             className="flex-shrink-0 w-11 h-11 bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-xl flex items-center justify-center shadow-md shadow-blue-500/25 hover:shadow-lg hover:shadow-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
-            {isThinking ? (
-              <Loader2 size={18} className="animate-spin" />
-            ) : (
-              <Send size={18} />
-            )}
+            {isThinking
+              ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              : <Send size={18} />
+            }
           </motion.button>
         </form>
       </div>

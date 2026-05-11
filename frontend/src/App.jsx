@@ -5,6 +5,7 @@ import { Toaster } from 'react-hot-toast';
 import AuthLayout   from './components/layout/AuthLayout';
 import PublicLayout from './components/layout/PublicLayout';
 import GlobalLoader from './components/ui/GlobalLoader';
+import ErrorBoundary from './components/ui/ErrorBoundary';
 
 import { AuthProvider }  from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -42,25 +43,28 @@ function App() {
               error:   { iconTheme: { primary: '#ef4444', secondary: '#fff' } },
             }}
           />
-          <Suspense fallback={PageFallback}>
-            <Routes>
-              {/* Public routes */}
-              <Route element={<PublicLayout />}>
-                <Route path="/"      element={<Landing />} />
-                <Route path="/login" element={<Login />} />
-              </Route>
+          {/* Root boundary — catches anything that escapes page boundaries */}
+          <ErrorBoundary variant="page">
+            <Suspense fallback={PageFallback}>
+              <Routes>
+                {/* Public routes */}
+                <Route element={<PublicLayout />}>
+                  <Route path="/"      element={<ErrorBoundary variant="page"><Landing /></ErrorBoundary>} />
+                  <Route path="/login" element={<ErrorBoundary variant="page"><Login /></ErrorBoundary>} />
+                </Route>
 
-              {/* Authenticated routes */}
-              <Route element={<AuthLayout />}>
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/analyze"   element={<Analyze />} />
-                <Route path="/history"   element={<History />} />
-                <Route path="/profile"   element={<Profile />} />
-                <Route path="/settings"  element={<Settings />} />
-                <Route path="/assistant" element={<Assistant />} />
-              </Route>
-            </Routes>
-          </Suspense>
+                {/* Authenticated routes */}
+                <Route element={<AuthLayout />}>
+                  <Route path="/dashboard" element={<ErrorBoundary variant="page"><Dashboard /></ErrorBoundary>} />
+                  <Route path="/analyze"   element={<ErrorBoundary variant="page"><Analyze /></ErrorBoundary>} />
+                  <Route path="/history"   element={<ErrorBoundary variant="page"><History /></ErrorBoundary>} />
+                  <Route path="/profile"   element={<ErrorBoundary variant="page"><Profile /></ErrorBoundary>} />
+                  <Route path="/settings"  element={<ErrorBoundary variant="page"><Settings /></ErrorBoundary>} />
+                  <Route path="/assistant" element={<ErrorBoundary variant="page"><Assistant /></ErrorBoundary>} />
+                </Route>
+              </Routes>
+            </Suspense>
+          </ErrorBoundary>
         </Router>
       </AuthProvider>
     </ThemeProvider>

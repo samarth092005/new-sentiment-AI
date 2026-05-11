@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { updateProfile } from 'firebase/auth';
-import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, limit, where } from 'firebase/firestore';
 import { db, auth } from '../firebase/config';
 import {
   User, Mail, Calendar, Activity, TrendingUp, AlertTriangle,
@@ -10,12 +10,12 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-// ── Skeleton loader block ────────────────────────────────────────────────────
+// ── Skeleton loader ───────────────────────────────────────────────────────────
 function Skeleton({ className }) {
   return <div className={`animate-pulse bg-slate-200 rounded-xl ${className}`} />;
 }
 
-// ── Stat card ────────────────────────────────────────────────────────────────
+// ── Stat card ─────────────────────────────────────────────────────────────────
 function StatCard({ icon: Icon, iconBg, iconColor, label, value, loading }) {
   return (
     <motion.div
@@ -36,13 +36,13 @@ function StatCard({ icon: Icon, iconBg, iconColor, label, value, loading }) {
   );
 }
 
-// ── Activity item ─────────────────────────────────────────────────────────────
+// ── Activity item ──────────────────────────────────────────────────────────────
 function ActivityItem({ item, index }) {
   const config = {
-    single: { icon: FileText,    color: 'text-blue-600',   bg: 'bg-blue-50',   label: 'Review Analyzed' },
-    bulk:   { icon: Database,    color: 'text-indigo-600', bg: 'bg-indigo-50', label: 'CSV Bulk Upload' },
+    single: { icon: FileText,  color: 'text-blue-600',   bg: 'bg-blue-50',   label: 'Review Analyzed' },
+    bulk:   { icon: Database,  color: 'text-indigo-600', bg: 'bg-indigo-50', label: 'CSV Bulk Upload' },
   };
-  const cfg = config[item.type] || config.single;
+  const cfg  = config[item.type] || config.single;
   const Icon = cfg.icon;
 
   return (
@@ -72,7 +72,7 @@ function ActivityItem({ item, index }) {
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Main component ─────────────────────────────────────────────────────────────
 export default function Profile() {
   const { user } = useAuth();
 
@@ -83,12 +83,12 @@ export default function Profile() {
   const [saving,          setSaving]          = useState(false);
 
   const [stats, setStats] = useState({
-    totalAnalyses:   0,
-    positiveCount:   0,
-    negativeCount:   0,
-    neutralCount:    0,
-    bulkReports:     0,
-    topDepartment:   '—',
+    totalAnalyses:  0,
+    positiveCount:  0,
+    negativeCount:  0,
+    neutralCount:   0,
+    bulkReports:    0,
+    topDepartment:  '—',
   });
   const [recentActivity, setRecentActivity] = useState([]);
 
@@ -96,12 +96,16 @@ export default function Profile() {
     ? new Date(user.metadata.creationTime).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
     : 'Unknown';
 
-  // ── Fetch stats from Firestore ──────────────────────────────────────────
+  // ── Fetch stats (UID-scoped) ─────────────────────────────────────────────
   useEffect(() => {
+    if (!user?.uid) return;
     let cancelled = false;
+
     const fetchStats = async () => {
       try {
-        const snap = await getDocs(collection(db, 'history'));
+        const snap = await getDocs(
+          query(collection(db, 'history'), where('uid', '==', user.uid))
+        );
         let total = 0, pos = 0, neg = 0, neu = 0, bulk = 0;
         const deptMap = {};
 
@@ -127,34 +131,43 @@ export default function Profile() {
           setStatsLoading(false);
         }
       } catch (err) {
-        console.error('Profile stats error:', err);
+        console.error('[Profile] Stats fetch failed:', err);
         if (!cancelled) setStatsLoading(false);
       }
     };
+
     fetchStats();
     return () => { cancelled = true; };
-  }, []);
+  }, [user?.uid]);
 
-  // ── Fetch recent activity ───────────────────────────────────────────────
+  // ── Fetch recent activity (UID-scoped) ────────────────────────────────────
   useEffect(() => {
+    if (!user?.uid) return;
     let cancelled = false;
+
     const fetchActivity = async () => {
       try {
-        const q = query(collection(db, 'history'), orderBy('timestamp', 'desc'), limit(6));
+        const q = query(
+          collection(db, 'history'),
+          where('uid', '==', user.uid),
+          orderBy('timestamp', 'desc'),
+          limit(6)
+        );
         const snap = await getDocs(q);
         const items = [];
         snap.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
         if (!cancelled) { setRecentActivity(items); setActivityLoading(false); }
       } catch (err) {
-        console.error('Activity fetch error:', err);
+        console.error('[Profile] Activity fetch failed:', err);
         if (!cancelled) setActivityLoading(false);
       }
     };
+
     fetchActivity();
     return () => { cancelled = true; };
-  }, []);
+  }, [user?.uid]);
 
-  // ── Save display name ───────────────────────────────────────────────────
+  // ── Save display name ────────────────────────────────────────────────────
   const handleSaveName = async () => {
     if (!displayName.trim()) { toast.error('Display name cannot be empty.'); return; }
     setSaving(true);
@@ -163,7 +176,7 @@ export default function Profile() {
       setEditing(false);
       toast.success('Profile updated successfully!');
     } catch (err) {
-      console.error('Update error:', err);
+      console.error('[Profile] Update failed:', err);
       toast.error('Failed to update profile. Try again.');
     } finally {
       setSaving(false);
@@ -192,7 +205,7 @@ export default function Profile() {
         </div>
 
         <div className="px-5 md:px-8 pb-7 relative">
-          {/* Avatar + actions row */}
+          {/* Avatar row */}
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 -mt-12 mb-5">
             <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-white p-1.5 shadow-md flex-shrink-0">
               <div className="w-full h-full rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-3xl text-white font-bold">
@@ -245,15 +258,15 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* Stats */}
+          {/* Stats grid */}
           <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4">Usage Statistics</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <StatCard icon={Activity}      iconBg="bg-blue-50"   iconColor="text-blue-600"  label="Total Analyses"   value={stats.totalAnalyses.toLocaleString()} loading={statsLoading} />
-            <StatCard icon={TrendingUp}    iconBg="bg-green-50"  iconColor="text-green-600" label="Positive Reviews"  value={stats.positiveCount.toLocaleString()} loading={statsLoading} />
-            <StatCard icon={AlertTriangle} iconBg="bg-red-50"    iconColor="text-red-600"   label="Negative Reviews"  value={stats.negativeCount.toLocaleString()} loading={statsLoading} />
-            <StatCard icon={Database}      iconBg="bg-indigo-50" iconColor="text-indigo-600" label="Bulk Reports Run"  value={stats.bulkReports.toLocaleString()}   loading={statsLoading} />
-            <StatCard icon={BrainCircuit}  iconBg="bg-purple-50" iconColor="text-purple-600" label="Top Department"    value={stats.topDepartment}                  loading={statsLoading} />
-            <StatCard icon={User}          iconBg="bg-slate-100" iconColor="text-slate-600"  label="Neutral Reviews"   value={stats.neutralCount.toLocaleString()}  loading={statsLoading} />
+            <StatCard icon={Activity}      iconBg="bg-blue-50"   iconColor="text-blue-600"   label="Total Analyses"  value={stats.totalAnalyses.toLocaleString()} loading={statsLoading} />
+            <StatCard icon={TrendingUp}    iconBg="bg-green-50"  iconColor="text-green-600"  label="Positive Reviews" value={stats.positiveCount.toLocaleString()}  loading={statsLoading} />
+            <StatCard icon={AlertTriangle} iconBg="bg-red-50"    iconColor="text-red-600"    label="Negative Reviews" value={stats.negativeCount.toLocaleString()}  loading={statsLoading} />
+            <StatCard icon={Database}      iconBg="bg-indigo-50" iconColor="text-indigo-600" label="Bulk Reports Run"  value={stats.bulkReports.toLocaleString()}    loading={statsLoading} />
+            <StatCard icon={BrainCircuit}  iconBg="bg-purple-50" iconColor="text-purple-600" label="Top Department"   value={stats.topDepartment}                   loading={statsLoading} />
+            <StatCard icon={User}          iconBg="bg-slate-100" iconColor="text-slate-600"  label="Neutral Reviews"  value={stats.neutralCount.toLocaleString()}   loading={statsLoading} />
           </div>
         </div>
       </motion.div>
@@ -279,7 +292,9 @@ export default function Profile() {
             ))}
           </div>
         ) : recentActivity.length === 0 ? (
-          <p className="text-slate-400 text-sm text-center py-6">No activity yet. Start analyzing customer reviews!</p>
+          <p className="text-slate-400 text-sm text-center py-6">
+            No activity yet. Start analyzing customer reviews to build your activity feed!
+          </p>
         ) : (
           <div className="space-y-4 divide-y divide-slate-50">
             {recentActivity.map((item, i) => (

@@ -1,73 +1,149 @@
 import os
+import re
 import json
+import logging
 import google.generativeai as genai
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Configure Gemini API
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+logger = logging.getLogger(__name__)
 
-# Gemini model
+# ── Gemini configuration ──────────────────────────────────────────────────────
+_api_key = os.getenv("GEMINI_API_KEY", "")
+if not _api_key:
+    logger.warning("GEMINI_API_KEY is not set — AI features will use fallback mode.")
+
+genai.configure(api_key=_api_key)
+
 model = genai.GenerativeModel(
-    model_name="gemini-2.5-flash"
+    model_name="gemini-2.5-flash",
+    generation_config=genai.types.GenerationConfig(
+        max_output_tokens=1024,
+        temperature=0.4,
+    ),
 )
 
+# ── Shared request options (timeout) ─────────────────────────────────────────
+_REQUEST_OPTIONS = {"timeout": 20}  # 20-second hard timeout per call
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _classify_error(e: Exception) -> str:
+    """Return a human-readable reason for the Gemini failure."""
+    msg = str(e).lower()
+    if "quota" in msg or "429" in msg:
+        return "quota_exceeded"
+    if "timeout" in msg or "deadline" in msg:
+        return "timeout"
+    if "invalid" in msg or "blocked" in msg or "safety" in msg:
+        return "blocked_response"
+    if "network" in msg or "connection" in msg or "unavailable" in msg:
+        return "network_error"
+    return "unknown_error"
+
+
+def _extract_json(raw: str) -> dict | None:
+    """
+    Attempt to extract a JSON object from raw text even when markdown
+    wrappers are present or the model adds prose before/after the JSON.
+    Returns a parsed dict or None.
+    """
+    # Strip common markdown fences
+    cleaned = raw.replace("```json", "").replace("```", "").strip()
+    # Try direct parse first
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+    # Regex fallback — grab first {...} block
+    match = re.search(r"\{[\s\S]+\}", cleaned)
+    if match:
+        try:
+            return json.loads(match.group())
+        except json.JSONDecodeError:
+            pass
+    return None
+
+
+def _safe_text(response) -> str | None:
+    """Safely extract .text from a Gemini response; return None on empty/blocked."""
+    try:
+        text = response.text
+        return text.strip() if text and text.strip() else None
+    except Exception:
+        return None
+
+
+# ── Public API ────────────────────────────────────────────────────────────────
+
 def generate_insights(review: str, sentiment: str) -> dict:
+    """
+    Generate structured AI insights for a single customer review.
+    Always returns a valid dict — falls back gracefully on any Gemini failure.
+    """
+    _fallback = {
+        "summary": "AI insights are temporarily unavailable. Core sentiment analysis remains fully operational.",
+        "action_items": ["Review this feedback manually for follow-up actions."],
+        "key_phrases": [],
+        "urgency": "Low",
+    }
 
     prompt = f"""
-    Analyze the following customer review.
+Analyze the following customer review.
 
-    Review:
-    {review}
+Review:
+{review}
 
-    Sentiment:
-    {sentiment}
+Sentiment:
+{sentiment}
 
-    Return ONLY valid JSON in this exact format:
+Return ONLY valid JSON in this exact format:
 
-    {{
-      "summary": "short summary",
-      "action_items": ["action 1", "action 2"],
-      "key_phrases": ["phrase 1", "phrase 2"],
-      "urgency": "Low"
-    }}
-    """
+{{
+  "summary": "short summary",
+  "action_items": ["action 1", "action 2"],
+  "key_phrases": ["phrase 1", "phrase 2"],
+  "urgency": "Low"
+}}
+"""
 
     try:
+        response = model.generate_content(prompt, request_options=_REQUEST_OPTIONS)
+        raw = _safe_text(response)
+        if not raw:
+            logger.warning("generate_insights: empty Gemini response; using fallback.")
+            return _fallback
 
-        response = model.generate_content(prompt)
+        parsed = _extract_json(raw)
+        if not parsed:
+            logger.warning("generate_insights: JSON parse failed; using fallback. raw=%s", raw[:200])
+            return _fallback
 
-        raw_text = response.text.strip()
-
-        # Remove markdown json wrappers if present
-        raw_text = raw_text.replace("```json", "").replace("```", "").strip()
-
-        parsed = json.loads(raw_text)
-
-        return parsed
+        # Validate required keys — fill missing with safe defaults
+        return {
+            "summary":      parsed.get("summary") or _fallback["summary"],
+            "action_items": parsed.get("action_items") or _fallback["action_items"],
+            "key_phrases":  parsed.get("key_phrases") or [],
+            "urgency":      parsed.get("urgency") or "Low",
+        }
 
     except Exception as e:
-
-        print("GEMINI ERROR:", e)
-
-        return {
-            "summary": "AI insights temporarily unavailable.",
-            "action_items": [
-                "Review customer feedback manually"
-            ],
-            "key_phrases": [],
-            "urgency": "Low"
-        }
+        reason = _classify_error(e)
+        logger.error("generate_insights failed [%s]: %s", reason, e)
+        if reason == "quota_exceeded":
+            _fallback["summary"] = "AI quota reached. Insights will resume automatically once capacity is restored."
+        elif reason == "timeout":
+            _fallback["summary"] = "AI response timed out. Core sentiment analysis is still available."
+        return _fallback
 
 
 def generate_assistant_response(query: str, context: list) -> str:
     """
     Emovix AI Customer Intelligence Copilot.
-    Answers business analytics questions with executive-level, grounded intelligence
-    based on the provided review context.
+    Always returns a non-empty string — never raises.
     """
-
     if not context:
         return (
             "No customer review data is currently available in your Emovix workspace. "
@@ -75,10 +151,9 @@ def generate_assistant_response(query: str, context: list) -> str:
             "complaint patterns, department risks, and operational trends from your data."
         )
 
-    # ── Pre-compute lightweight stats to enrich prompt context ──────────────
+    # ── Pre-compute lightweight stats ─────────────────────────────────────────
     total = len(context)
 
-    # Sentiment distribution
     sentiment_counts: dict = {}
     for item in context:
         s = item.get("sentiment", "Unknown")
@@ -89,22 +164,17 @@ def generate_assistant_response(query: str, context: list) -> str:
         for s, c in sorted(sentiment_counts.items(), key=lambda x: -x[1])
     )
 
-    # Department frequency
     dept_counts: dict = {}
     for item in context:
         d = item.get("department", "General")
         dept_counts[d] = dept_counts.get(d, 0) + 1
 
     top_departments = sorted(dept_counts.items(), key=lambda x: -x[1])
-    dept_summary = ", ".join(
-        f"{d} ({c} reviews)" for d, c in top_departments[:5]
-    )
+    dept_summary = ", ".join(f"{d} ({c} reviews)" for d, c in top_departments[:5])
 
-    # Date range
     timestamps = [item.get("timestamp", "")[:10] for item in context if item.get("timestamp")]
     date_range = f"{min(timestamps)} to {max(timestamps)}" if timestamps else "Unknown"
 
-    # Format individual reviews compactly
     review_lines = []
     for idx, item in enumerate(context, 1):
         review_lines.append(
@@ -113,10 +183,8 @@ def generate_assistant_response(query: str, context: list) -> str:
             f"{item.get('timestamp', '')[:10]} | "
             f"\"{item.get('review', '')[:220]}\""
         )
-
     review_block = "\n".join(review_lines)
 
-    # ── System prompt — Executive BI Analyst persona ─────────────────────────
     prompt = f"""SYSTEM ROLE:
 You are the Emovix AI Customer Intelligence Copilot — a senior customer analytics advisor embedded in a SaaS business intelligence platform.
 
@@ -154,30 +222,52 @@ ANALYST QUERY:
 Deliver a sharp, executive-grade intelligence response:"""
 
     try:
-        response = model.generate_content(prompt)
-        return response.text.strip()
-    except Exception as e:
-        print("GEMINI ASSISTANT ERROR:", e)
+        response = model.generate_content(prompt, request_options=_REQUEST_OPTIONS)
+        text = _safe_text(response)
+        if text:
+            return text
+        logger.warning("generate_assistant_response: empty response from Gemini.")
         return (
-            "The intelligence engine is temporarily unavailable. "
-            "Please verify your API key configuration and try again shortly."
+            "The AI Intelligence Engine returned an empty response. "
+            "Your data context is available — please rephrase your question or try again shortly."
+        )
+    except Exception as e:
+        reason = _classify_error(e)
+        logger.error("generate_assistant_response failed [%s]: %s", reason, e)
+
+        if reason == "quota_exceeded":
+            return (
+                "The AI Intelligence Engine has reached its current capacity limit. "
+                "Your customer data and analytics remain fully available — "
+                "AI-powered responses will resume automatically once capacity is restored."
+            )
+        if reason == "timeout":
+            return (
+                "The intelligence engine took too long to respond this time. "
+                "This is typically transient — please try again in a moment."
+            )
+        return (
+            "The AI Intelligence Engine is temporarily operating at reduced capacity. "
+            "Core operational analytics remain fully available. "
+            "Please try again shortly."
         )
 
 
 def generate_dashboard_intelligence(context: list) -> dict:
     """
-    Emovix AI Dashboard Intelligence Engine (Phase 4B/4C/4D).
-    Generates structured executive business intelligence from review history.
-    Returns JSON: executive_summary, top_issues, recommendations,
-                  department_risk, alerts, risk_level.
+    Emovix AI Dashboard Intelligence Engine.
+    Always returns a complete, valid dict — never raises.
     """
     _empty = {
-        "executive_summary": "No review data is currently available. Analyze customer reviews to unlock AI intelligence insights.",
+        "executive_summary": (
+            "No review data is currently available. Analyze customer feedback "
+            "to unlock AI-powered operational intelligence."
+        ),
         "top_issues": [],
         "recommendations": ["Process customer reviews to generate operational recommendations."],
         "department_risk": "Insufficient data to assess department risk.",
         "alerts": [],
-        "risk_level": "low"
+        "risk_level": "low",
     }
 
     if not context:
@@ -185,7 +275,6 @@ def generate_dashboard_intelligence(context: list) -> dict:
 
     total = len(context)
 
-    # Sentiment distribution
     sent_counts: dict = {}
     for item in context:
         s = item.get("sentiment", "Unknown")
@@ -198,7 +287,6 @@ def generate_dashboard_intelligence(context: list) -> dict:
         for s, c in sorted(sent_counts.items(), key=lambda x: -x[1])
     )
 
-    # Department frequency
     dept_counts: dict = {}
     for item in context:
         d = item.get("department", "General")
@@ -207,11 +295,9 @@ def generate_dashboard_intelligence(context: list) -> dict:
     top_depts = sorted(dept_counts.items(), key=lambda x: -x[1])
     dept_summary = ", ".join(f"{d} ({c})" for d, c in top_depts[:5])
 
-    # Date range
     ts = [item.get("timestamp", "")[:10] for item in context if item.get("timestamp")]
     date_range = f"{min(ts)} to {max(ts)}" if ts else "Unknown"
 
-    # Format reviews compactly
     review_block = "\n".join(
         f"[{i}] {item.get('sentiment','N/A')} | {item.get('department','General')} | \"{item.get('review','')[:180]}\""
         for i, item in enumerate(context, 1)
@@ -256,10 +342,53 @@ Return ONLY valid JSON — no markdown, no extra text:
 }}"""
 
     try:
-        response = model.generate_content(prompt)
-        raw = response.text.strip().replace("```json", "").replace("```", "").strip()
-        return json.loads(raw)
+        response = model.generate_content(prompt, request_options=_REQUEST_OPTIONS)
+        raw = _safe_text(response)
+        if not raw:
+            logger.warning("generate_dashboard_intelligence: empty Gemini response.")
+            _empty["executive_summary"] = (
+                f"AI Intelligence Engine is temporarily operating at reduced capacity. "
+                f"Core analytics across {total} records remain available."
+            )
+            return _empty
+
+        parsed = _extract_json(raw)
+        if not parsed:
+            logger.warning("generate_dashboard_intelligence: JSON parse failed. raw=%s", raw[:200])
+            _empty["executive_summary"] = (
+                f"AI Intelligence Engine returned a malformed response. "
+                f"Manual review of {total} records recommended while AI recovers."
+            )
+            return _empty
+
+        # Validate + fill missing keys
+        return {
+            "executive_summary": parsed.get("executive_summary") or _empty["executive_summary"],
+            "top_issues":        parsed.get("top_issues") or [],
+            "recommendations":   parsed.get("recommendations") or _empty["recommendations"],
+            "department_risk":   parsed.get("department_risk") or _empty["department_risk"],
+            "alerts":            parsed.get("alerts") or [],
+            "risk_level":        parsed.get("risk_level") or "low",
+        }
+
     except Exception as e:
-        print("GEMINI INTELLIGENCE ERROR:", e)
-        _empty["executive_summary"] = f"AI analysis encountered an error. Manual review of {total} records recommended."
+        reason = _classify_error(e)
+        logger.error("generate_dashboard_intelligence failed [%s]: %s", reason, e)
+
+        if reason == "quota_exceeded":
+            _empty["executive_summary"] = (
+                "AI Intelligence Engine has reached its current capacity limit. "
+                f"Core analytics across {total} reviews remain available. "
+                "Advanced insights will resume automatically when capacity is restored."
+            )
+        elif reason == "timeout":
+            _empty["executive_summary"] = (
+                f"AI Intelligence Engine timed out while processing {total} reviews. "
+                "Core operational metrics remain fully available. Please retry the intelligence report."
+            )
+        else:
+            _empty["executive_summary"] = (
+                "AI Intelligence Engine is temporarily operating at reduced capacity. "
+                f"Core analytics across {total} reviews remain available while advanced insights recover."
+            )
         return _empty

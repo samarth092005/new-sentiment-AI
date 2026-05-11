@@ -1,120 +1,85 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Send, Bot, CheckCircle2, AlertCircle, Loader2, FileText, Database, BrainCircuit, ChevronRight, Lightbulb } from 'lucide-react';
+import {
+  Send, Bot, CheckCircle2, AlertCircle, FileText,
+  Database, BrainCircuit, ChevronRight, Lightbulb, RefreshCw
+} from 'lucide-react';
 import axios from 'axios';
 import CsvUploader from '../components/CsvUploader';
 import { collection, addDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 import GlobalLoader from '../components/ui/GlobalLoader';
 import EmptyState from '../components/ui/EmptyState';
+import toast from 'react-hot-toast';
 
+// ── Typewriter animation ──────────────────────────────────────────────────────
 function TypewriterText({ text }) {
   const [displayedText, setDisplayedText] = useState('');
 
   useEffect(() => {
     setDisplayedText('');
     if (!text) return;
-
     let i = 0;
     const intervalId = setInterval(() => {
       setDisplayedText(text.substring(0, i + 1));
       i++;
       if (i >= text.length) clearInterval(intervalId);
-    }, 15); // Speed of typing
-
+    }, 15);
     return () => clearInterval(intervalId);
   }, [text]);
 
   return <span>{displayedText}</span>;
 }
 
-export default function Analyze() {
-  const [mode, setMode] = useState('single');
-  const [review, setReview] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
-  const [bulkResult, setBulkResult] = useState(null);
-  const [error, setError] = useState(null);
-  // Phase 4D — AI intelligence for bulk
-  const [bulkIntelligence, setBulkIntelligence] = useState(null);
-  const [bulkAiLoading, setBulkAiLoading] = useState(false);
+// ── Silent Firestore save (never blocks or surfaces UI errors) ────────────────
+async function saveToFirestore(data, isBulk = false, reviewText = '') {
+  const currentUser = auth.currentUser;
+  if (!currentUser) return;
 
-  const saveToFirestore = async (data, isBulk = false) => {
-    try {
-
-      const currentUser = auth.currentUser;
-
-      console.log("Current User:", currentUser);
-      console.log("UID:", currentUser?.uid);
-
-      if (!currentUser) {
-        console.error("No authenticated user found");
-        return;
-      }
-
-      // =========================
-      // BULK SAVE
-      // =========================
-
-      if (isBulk) {
-
-        await addDoc(collection(db, 'history'), {
-
-          uid: currentUser.uid,
-
-          type: 'bulk',
-
-          total: data.total_reviews,
-
-          positive_percent: data.positive_percent,
-
-          negative_percent: data.negative_percent,
-
-          common_departments: data.common_departments || {},
-
-          timestamp: new Date().toISOString()
-
-        });
-
-      }
-
-      // =========================
-      // SINGLE SAVE
-      // =========================
-
-      else {
-
-        await addDoc(collection(db, 'history'), {
-
-          uid: currentUser.uid,
-
-          type: 'single',
-
-          review: review,
-
-          sentiment: data.sentiment,
-
-          department: data.department || 'General',
-
-          confidence: data.confidence,
-
-          insights: data.insights,
-
-          timestamp: new Date().toISOString()
-
-        });
-
-      }
-
-      console.log("Saved successfully to Firestore");
-
-    } catch (err) {
-
-      console.error("Firestore save error:", err);
-
+  try {
+    if (isBulk) {
+      await addDoc(collection(db, 'history'), {
+        uid:                currentUser.uid,
+        type:               'bulk',
+        total:              data.total_reviews,
+        positive_percent:   data.positive_percent,
+        negative_percent:   data.negative_percent,
+        common_departments: data.common_departments || {},
+        timestamp:          new Date().toISOString(),
+      });
+    } else {
+      await addDoc(collection(db, 'history'), {
+        uid:        currentUser.uid,
+        type:       'single',
+        review:     reviewText,
+        sentiment:  data.sentiment,
+        department: data.department || 'General',
+        confidence: data.confidence,
+        insights:   data.insights,
+        timestamp:  new Date().toISOString(),
+      });
     }
-  };
+  } catch (err) {
+    // Firestore save failure is silent — never block the analysis result
+    console.error('[Analyze] Firestore save failed (non-blocking):', err);
+  }
+}
 
+// ── Main component ─────────────────────────────────────────────────────────────
+export default function Analyze() {
+  const [mode, setMode]               = useState('single');
+  const [review, setReview]           = useState('');
+  const [loading, setLoading]         = useState(false);
+  const [result, setResult]           = useState(null);
+  const [bulkResult, setBulkResult]   = useState(null);
+  const [error, setError]             = useState(null);
+
+  // Bulk AI intelligence
+  const [bulkIntelligence, setBulkIntelligence] = useState(null);
+  const [bulkAiLoading, setBulkAiLoading]       = useState(false);
+  const [bulkAiError, setBulkAiError]           = useState(false);
+
+  // ── Single analysis ──────────────────────────────────────────────────────
   const handleAnalyze = async (e) => {
     e.preventDefault();
     if (!review.trim()) return;
@@ -125,79 +90,88 @@ export default function Analyze() {
     setBulkResult(null);
 
     try {
-      const response = await axios.post('http://localhost:8000/api/analyze', {
-        review
-      });
+      const response = await axios.post('http://localhost:8000/api/analyze', { review });
       setResult(response.data);
-      saveToFirestore(response.data, false);
+      // Save to Firestore — fire-and-forget, non-blocking
+      saveToFirestore(response.data, false, review).then(() => {
+        toast.success('Analysis saved to your history.', { duration: 2000 });
+      });
     } catch (err) {
-      console.error(err);
-      setError('Failed to analyze the review. Make sure the backend is running.');
-      // Fallback
-      const dummy = {
-        sentiment: "Positive",
-        confidence: 0.92,
-        department: "Customer Support",
-        insights: {
-          summary: "The customer highly praises the application's ease of use and speed.",
-          urgency: "Low",
-          key_phrases: ["amazing app", "fast", "intuitive"],
-          action_items: ["Consider reaching out for a testimonial", "Monitor for continued positive feedback"]
-        }
-      };
-      setTimeout(() => {
-        setResult(dummy);
-        saveToFirestore(dummy, false);
-        setError(null);
-      }, 1500);
+      console.error('[Analyze] Analysis request failed:', err);
+      // Determine error message from response or use generic
+      const detail = err?.response?.data?.detail;
+      setError(
+        detail
+          ? `Analysis failed: ${detail}`
+          : 'Unable to reach the Emovix backend. Please ensure the server is running and try again.'
+      );
     } finally {
       setLoading(false);
     }
   };
 
+  // ── Bulk analysis ────────────────────────────────────────────────────────
   const handleBulkUpload = async (reviews) => {
     setLoading(true);
     setError(null);
     setResult(null);
     setBulkResult(null);
     setBulkIntelligence(null);
+    setBulkAiError(false);
 
     try {
       const response = await axios.post('http://localhost:8000/api/analyze/bulk', { reviews });
       setBulkResult(response.data);
-      saveToFirestore(response.data, true);
+      // Fire-and-forget save
+      saveToFirestore(response.data, true).then(() => {
+        toast.success(`${response.data.total_reviews} reviews analyzed and saved.`);
+      });
     } catch (err) {
-      console.error(err);
-      setError('Failed to process bulk upload. Backend might be down.');
+      console.error('[Analyze] Bulk upload failed:', err);
+      const detail = err?.response?.data?.detail;
+      setError(
+        detail
+          ? `Bulk analysis failed: ${detail}`
+          : 'Bulk analysis failed. Please check the backend connection and try again.'
+      );
     } finally {
       setLoading(false);
     }
   };
 
+  // ── Bulk AI intelligence report ──────────────────────────────────────────
   const handleBulkIntelligence = async () => {
     if (!bulkResult?.results?.length) return;
     setBulkAiLoading(true);
+    setBulkAiError(false);
+
     try {
       const ctx = bulkResult.results.slice(0, 25).map(r => ({
-        review: r.review?.substring(0, 220) || '',
-        sentiment: r.sentiment || 'Neutral',
+        review:     r.review?.substring(0, 220) || '',
+        sentiment:  r.sentiment || 'Neutral',
         department: r.department || 'General',
-        timestamp: new Date().toISOString(),
+        timestamp:  new Date().toISOString(),
       }));
       const res = await axios.post('http://localhost:8000/api/intelligence/dashboard', { context: ctx });
       setBulkIntelligence(res.data);
     } catch (err) {
-      console.error('Bulk intelligence error:', err);
+      console.error('[Analyze] Bulk intelligence request failed:', err);
+      setBulkAiError(true);
     } finally {
       setBulkAiLoading(false);
     }
+  };
+
+  const handleRetryBulkIntelligence = () => {
+    setBulkAiError(false);
+    handleBulkIntelligence();
   };
 
   return (
     <div className="flex-grow bg-slate-50 p-8">
       <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-8">
 
-        {/* Input Section */}
+        {/* ── Input Section ──────────────────────────────────────────────── */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -237,40 +211,70 @@ export default function Analyze() {
                 disabled={loading || !review.trim()}
                 className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-xl hover:shadow-lg hover:shadow-blue-500/30 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                {loading ? <Loader2 className="animate-spin" /> : 'Analyze Sentiment'}
+                {loading
+                  ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Analyzing…</>
+                  : 'Analyze Sentiment'
+                }
               </button>
             </form>
           ) : (
             <CsvUploader onUpload={handleBulkUpload} isLoading={loading} />
           )}
 
+          {/* Error State */}
           {error && (
-            <p className="text-amber-600 text-sm mt-4 bg-amber-50 p-3 rounded-lg border border-amber-200 flex items-center gap-2">
-              <AlertCircle size={16} /> {error}
-            </p>
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-4 bg-red-50 border border-red-200 rounded-xl p-4"
+            >
+              <div className="flex items-start gap-3">
+                <AlertCircle size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-red-700 text-sm font-medium mb-1">Analysis Unavailable</p>
+                  <p className="text-red-600 text-xs leading-relaxed">{error}</p>
+                </div>
+              </div>
+              <button
+                onClick={mode === 'single' ? handleAnalyze : undefined}
+                disabled={mode === 'single' && !review.trim()}
+                className="mt-3 w-full flex items-center justify-center gap-2 py-2 text-sm font-semibold text-red-600 hover:text-red-700 bg-white border border-red-200 rounded-xl transition-all hover:bg-red-50 disabled:opacity-50"
+              >
+                <RefreshCw size={14} /> Retry Analysis
+              </button>
+            </motion.div>
           )}
         </motion.div>
 
-        {/* Results Section */}
+        {/* ── Results Section ─────────────────────────────────────────────── */}
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5, delay: 0.2 }}
           className="relative h-full min-h-[500px]"
         >
-          <GlobalLoader isLoading={loading} text={mode === 'single' ? 'Running ML pipeline & Gemini AI...' : 'Processing Bulk Data...'} />
+          {/* Inline loader to avoid layout shifting */}
+          <GlobalLoader
+            variant="inline"
+            isLoading={loading}
+            text={mode === 'single'
+              ? ['Running ML pipeline…', 'Generating AI insights…', 'Almost ready…']
+              : ['Processing CSV data…', 'Running batch analysis…', 'Compiling results…']
+            }
+          />
 
-          {!result && !bulkResult && !loading && (
+          {!result && !bulkResult && !loading && !error && (
             <div className="h-full flex flex-col items-center justify-center p-8">
               <EmptyState
                 icon={Bot}
                 title="Ready for Analysis"
                 description="Results and AI insights will appear here once you submit your feedback or upload a CSV."
+                subtitle="Powered by Emovix ML pipeline + Gemini AI"
               />
             </div>
           )}
 
-          {/* Single Result Rendering */}
+          {/* ── Single Result ───────────────────────────────────────────── */}
           {result && !loading && mode === 'single' && (
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
@@ -281,10 +285,11 @@ export default function Analyze() {
                 <div>
                   <h3 className="text-slate-500 text-sm font-semibold uppercase tracking-wider mb-2">Sentiment & Dept</h3>
                   <div className="flex items-center gap-3 flex-wrap">
-                    <span className={`px-4 py-2 rounded-full text-lg font-bold flex items-center gap-2 ${result.sentiment === 'Positive' ? 'bg-green-100 text-green-700' :
+                    <span className={`px-4 py-2 rounded-full text-lg font-bold flex items-center gap-2 ${
+                      result.sentiment === 'Positive' ? 'bg-green-100 text-green-700' :
                       result.sentiment === 'Negative' ? 'bg-red-100 text-red-700' :
-                        'bg-slate-100 text-slate-700'
-                      }`}>
+                      'bg-slate-100 text-slate-700'
+                    }`}>
                       {result.sentiment === 'Positive' && <CheckCircle2 size={20} />}
                       {result.sentiment === 'Negative' && <AlertCircle size={20} />}
                       {result.sentiment}
@@ -301,41 +306,46 @@ export default function Analyze() {
 
               <div>
                 <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                  <Bot className="text-indigo-500" /> AI Insights <span className="text-xs font-normal text-indigo-400 bg-indigo-50 px-2 py-0.5 rounded-full ml-2 animate-pulse">Typing...</span>
+                  <Bot className="text-indigo-500" /> AI Insights
+                  <span className="text-xs font-normal text-indigo-400 bg-indigo-50 px-2 py-0.5 rounded-full ml-2 animate-pulse">Typing...</span>
                 </h3>
 
                 <div className="space-y-6">
                   <div className="bg-indigo-50 p-5 rounded-2xl border border-indigo-100">
                     <h4 className="text-indigo-900 font-semibold mb-2">Summary</h4>
                     <p className="text-indigo-700 leading-relaxed min-h-[3rem]">
-                      <TypewriterText text={result.insights.summary} />
+                      <TypewriterText text={result.insights?.summary || 'No summary available.'} />
                     </p>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                       <h4 className="text-slate-700 font-semibold mb-2 text-sm uppercase tracking-wide">Urgency</h4>
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${result.insights.urgency === 'High' ? 'bg-red-100 text-red-700 glow-red' :
-                        result.insights.urgency === 'Medium' ? 'bg-amber-100 text-amber-700' :
-                          'bg-green-100 text-green-700'
-                        }`}>
-                        {result.insights.urgency}
+                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                        result.insights?.urgency === 'High'   ? 'bg-red-100 text-red-700' :
+                        result.insights?.urgency === 'Medium' ? 'bg-amber-100 text-amber-700' :
+                        'bg-green-100 text-green-700'
+                      }`}>
+                        {result.insights?.urgency || 'Low'}
                       </span>
                     </div>
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                       <h4 className="text-slate-700 font-semibold mb-2 text-sm uppercase tracking-wide">Key Phrases</h4>
                       <div className="flex flex-wrap gap-2">
-                        {result.insights.key_phrases.map((phrase, i) => (
-                          <motion.span
-                            initial={{ opacity: 0, scale: 0.8 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ delay: i * 0.1 + 0.5 }}
-                            key={i}
-                            className="text-xs bg-white border border-slate-200 px-2 py-1 rounded-lg text-slate-600 shadow-sm"
-                          >
-                            {phrase}
-                          </motion.span>
-                        ))}
+                        {(result.insights?.key_phrases || []).length > 0
+                          ? result.insights.key_phrases.map((phrase, i) => (
+                              <motion.span
+                                initial={{ opacity: 0, scale: 0.8 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ delay: i * 0.1 + 0.5 }}
+                                key={i}
+                                className="text-xs bg-white border border-slate-200 px-2 py-1 rounded-lg text-slate-600 shadow-sm"
+                              >
+                                {phrase}
+                              </motion.span>
+                            ))
+                          : <span className="text-xs text-slate-400">None identified</span>
+                        }
                       </div>
                     </div>
                   </div>
@@ -343,7 +353,7 @@ export default function Analyze() {
                   <div className="pt-2">
                     <h4 className="text-slate-800 font-semibold mb-3">Recommended Actions</h4>
                     <ul className="space-y-3">
-                      {result.insights.action_items.map((item, i) => (
+                      {(result.insights?.action_items || []).map((item, i) => (
                         <motion.li
                           initial={{ opacity: 0, x: -10 }}
                           animate={{ opacity: 1, x: 0 }}
@@ -351,7 +361,7 @@ export default function Analyze() {
                           key={i}
                           className="flex items-start gap-3 text-slate-600 bg-white p-3 rounded-xl border border-slate-100 shadow-sm"
                         >
-                          <div className="w-2 h-2 rounded-full bg-indigo-500 mt-2 flex-shrink-0 glow"></div>
+                          <div className="w-2 h-2 rounded-full bg-indigo-500 mt-2 flex-shrink-0" />
                           <span className="leading-relaxed"><TypewriterText text={item} /></span>
                         </motion.li>
                       ))}
@@ -362,7 +372,7 @@ export default function Analyze() {
             </motion.div>
           )}
 
-          {/* Bulk Result Rendering */}
+          {/* ── Bulk Result ──────────────────────────────────────────────── */}
           {bulkResult && !loading && mode === 'bulk' && (
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
@@ -408,18 +418,41 @@ export default function Analyze() {
                 </div>
               </div>
 
-              {/* 4D — AI Intelligence Report */}
-              {!bulkIntelligence && (
+              {/* AI Intelligence Report section */}
+              {!bulkIntelligence && !bulkAiError && (
                 <button
                   onClick={handleBulkIntelligence}
                   disabled={bulkAiLoading}
                   className="w-full py-3 flex items-center justify-center gap-2 bg-gradient-to-r from-slate-900 to-indigo-900 text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-indigo-900/30 transition-all disabled:opacity-50"
                 >
                   {bulkAiLoading
-                    ? <><Loader2 size={18} className="animate-spin" /> Generating Intelligence Report…</>
+                    ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Generating Intelligence Report…</>
                     : <><BrainCircuit size={18} /> Generate AI Intelligence Report</>
                   }
                 </button>
+              )}
+
+              {/* Bulk AI error */}
+              {bulkAiError && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3"
+                >
+                  <AlertCircle size={16} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-amber-800 text-sm font-medium">AI Intelligence Temporarily Unavailable</p>
+                    <p className="text-amber-700 text-xs mt-1">
+                      The intelligence engine is operating at reduced capacity. Core analytics above remain fully available.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleRetryBulkIntelligence}
+                    className="flex-shrink-0 flex items-center gap-1.5 text-amber-700 hover:text-amber-900 text-xs font-semibold"
+                  >
+                    <RefreshCw size={13} /> Retry
+                  </button>
+                </motion.div>
               )}
 
               {bulkIntelligence && (
@@ -461,7 +494,6 @@ export default function Analyze() {
               )}
             </motion.div>
           )}
-
         </motion.div>
       </div>
     </div>

@@ -19,6 +19,40 @@ from collections import Counter
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _build_fallback_insights() -> dict:
+    """Return safe default insights when Gemini is unavailable."""
+    return {
+        "summary": (
+            "AI Intelligence Engine is temporarily operating at reduced capacity. "
+            "Core sentiment analysis remains fully operational."
+        ),
+        "action_items": ["Review this feedback manually for follow-up actions."],
+        "key_phrases": [],
+        "urgency": "Low",
+    }
+
+
+def _build_fallback_intelligence(total: int = 0) -> DashboardIntelligenceResponse:
+    """Return a safe, complete DashboardIntelligenceResponse when Gemini is unavailable."""
+    summary = (
+        "AI Intelligence Engine is temporarily operating at reduced capacity. "
+        f"Core operational analytics across {total} records remain available while advanced insights recover."
+        if total > 0 else
+        "No review data is currently available. Analyze customer feedback to activate AI intelligence."
+    )
+    return DashboardIntelligenceResponse(
+        executive_summary=summary,
+        top_issues=[],
+        recommendations=["Process customer reviews to generate operational recommendations."],
+        department_risk="Insufficient data for department risk assessment.",
+        alerts=[],
+        risk_level="low",
+    )
+
+
 # ── Analyze (single review) ───────────────────────────────────────────────────
 @router.post("/analyze", response_model=AnalyzeResponse)
 async def analyze_review(request: AnalyzeRequest):
@@ -28,19 +62,29 @@ async def analyze_review(request: AnalyzeRequest):
     if len(review_text) > 5000:
         raise HTTPException(status_code=400, detail="Review text exceeds maximum length of 5000 characters.")
 
+    # ML pipeline — hard failure (500) if this breaks
     try:
         prediction = analyzer.predict(review_text)
         department = classify_department(review_text)
-        insights   = generate_insights(review_text, prediction["sentiment"])
     except Exception as e:
-        logger.error(f"Analysis error: {e}")
-        raise HTTPException(status_code=500, detail="Analysis pipeline encountered an error. Please try again.")
+        logger.error("ML pipeline error: %s", e)
+        raise HTTPException(
+            status_code=500,
+            detail="Sentiment analysis pipeline encountered an error. Please try again."
+        )
+
+    # Gemini — soft failure: always return 200 with fallback insights
+    try:
+        insights = generate_insights(review_text, prediction["sentiment"])
+    except Exception as e:
+        logger.error("Unexpected error from generate_insights: %s", e)
+        insights = _build_fallback_insights()
 
     return AnalyzeResponse(
         sentiment=prediction["sentiment"],
         confidence=prediction["confidence"],
         department=department,
-        insights=insights
+        insights=insights,
     )
 
 
@@ -58,7 +102,7 @@ async def bulk_analyze_reviews(request: BulkAnalyzeRequest):
         if not isinstance(review_text, str) or not review_text.strip():
             continue
         try:
-            prediction = analyzer.predict(review_text[:2000])  # cap per-review
+            prediction = analyzer.predict(review_text[:2000])
             dept       = classify_department(review_text)
             results.append(BulkAnalyzeItem(
                 review=review_text,
@@ -69,7 +113,7 @@ async def bulk_analyze_reviews(request: BulkAnalyzeRequest):
             sentiments.append(prediction["sentiment"])
             departments.append(dept)
         except Exception as e:
-            logger.warning(f"Skipping review due to error: {e}")
+            logger.warning("Skipping review due to ML error: %s", e)
             continue
 
     total = len(results)
@@ -79,14 +123,14 @@ async def bulk_analyze_reviews(request: BulkAnalyzeRequest):
             neutral_percent=0.0, common_departments={}, results=[]
         )
 
-    counts     = Counter(sentiments)
+    counts      = Counter(sentiments)
     dept_counts = dict(Counter(departments))
 
     return BulkAnalyzeResponse(
         total_reviews=total,
         positive_percent=round((counts.get("Positive", 0) / total) * 100, 1),
         negative_percent=round((counts.get("Negative", 0) / total) * 100, 1),
-        neutral_percent=round((counts.get("Neutral",  0) / total) * 100, 1),
+        neutral_percent =round((counts.get("Neutral",  0) / total) * 100, 1),
         common_departments=dept_counts,
         results=results
     )
@@ -107,17 +151,17 @@ async def create_report(request: ReportRequest):
             filename=f"Emovix_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         )
     except FileNotFoundError as e:
-        logger.error(f"PDF file not found: {e}")
+        logger.error("PDF file not found: %s", e)
         raise HTTPException(status_code=500, detail="Report file could not be generated.")
     except Exception as e:
-        logger.error(f"Report generation error: {e}")
+        logger.error("Report generation error: %s", e)
         raise HTTPException(status_code=500, detail="An error occurred while generating the report.")
 
 
 # ── AI Copilot ────────────────────────────────────────────────────────────────
 @router.post("/assistant/query", response_model=AssistantQueryResponse)
 async def assistant_query(request: AssistantQueryRequest):
-    """Emovix AI Customer Intelligence Copilot."""
+    """Emovix AI Customer Intelligence Copilot — always returns 200."""
     query = request.query.strip()
     if not query:
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
@@ -130,8 +174,12 @@ async def assistant_query(request: AssistantQueryRequest):
         context_dicts = [item.model_dump() for item in request.context]
         response_text = generate_assistant_response(query, context_dicts)
     except Exception as e:
-        logger.error(f"Assistant error: {e}")
-        raise HTTPException(status_code=503, detail="AI Copilot is temporarily unavailable. Please try again shortly.")
+        # generate_assistant_response should never raise — but be extra safe
+        logger.error("Unexpected assistant error: %s", e)
+        response_text = (
+            "The AI Intelligence Engine is temporarily operating at reduced capacity. "
+            "Core operational analytics remain available. Please try again shortly."
+        )
 
     return AssistantQueryResponse(response=response_text)
 
@@ -139,32 +187,36 @@ async def assistant_query(request: AssistantQueryRequest):
 # ── Dashboard Intelligence ────────────────────────────────────────────────────
 @router.post("/intelligence/dashboard", response_model=DashboardIntelligenceResponse)
 async def dashboard_intelligence(request: DashboardIntelligenceRequest):
-    """Emovix AI Dashboard Intelligence Engine (Phase 4B/4C/4D)."""
+    """Emovix AI Dashboard Intelligence Engine — always returns 200 with complete response."""
     if len(request.context) > 50:
         raise HTTPException(status_code=400, detail="Context exceeds maximum of 50 review records.")
+
+    total = len(request.context)
 
     try:
         context_dicts = [item.model_dump() for item in request.context]
         data = generate_dashboard_intelligence(context_dicts)
     except Exception as e:
-        logger.error(f"Intelligence engine error: {e}")
-        raise HTTPException(status_code=503, detail="Intelligence engine is temporarily unavailable.")
+        # generate_dashboard_intelligence should never raise — but be extra safe
+        logger.error("Unexpected intelligence engine error: %s", e)
+        return _build_fallback_intelligence(total)
 
+    # Safe alert construction with per-field defaults
     alerts = [
         DashboardAlert(
-            title=a.get("title", "Alert"),
-            message=a.get("message", ""),
-            severity=a.get("severity", "low")
+            title=a.get("title") or "Operational Alert",
+            message=a.get("message") or "",
+            severity=a.get("severity") or "low"
         )
         for a in data.get("alerts", [])
         if isinstance(a, dict)
     ]
 
     return DashboardIntelligenceResponse(
-        executive_summary=data.get("executive_summary", "Intelligence summary unavailable."),
-        top_issues=data.get("top_issues", []),
-        recommendations=data.get("recommendations", []),
-        department_risk=data.get("department_risk", ""),
+        executive_summary=data.get("executive_summary") or _build_fallback_intelligence(total).executive_summary,
+        top_issues       =data.get("top_issues", []),
+        recommendations  =data.get("recommendations", ["Review customer feedback to generate recommendations."]),
+        department_risk  =data.get("department_risk", "Insufficient data for department risk assessment."),
         alerts=alerts,
-        risk_level=data.get("risk_level", "low")
+        risk_level=data.get("risk_level", "low"),
     )
