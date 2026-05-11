@@ -4,24 +4,24 @@ import { Send, Bot, CheckCircle2, AlertCircle, Loader2, FileText, Database, Brai
 import axios from 'axios';
 import CsvUploader from '../components/CsvUploader';
 import { collection, addDoc } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import { auth, db } from '../firebase/config';
 import GlobalLoader from '../components/ui/GlobalLoader';
 import EmptyState from '../components/ui/EmptyState';
 
 function TypewriterText({ text }) {
   const [displayedText, setDisplayedText] = useState('');
-  
+
   useEffect(() => {
     setDisplayedText('');
     if (!text) return;
-    
+
     let i = 0;
     const intervalId = setInterval(() => {
       setDisplayedText(text.substring(0, i + 1));
       i++;
       if (i >= text.length) clearInterval(intervalId);
     }, 15); // Speed of typing
-    
+
     return () => clearInterval(intervalId);
   }, [text]);
 
@@ -41,28 +41,77 @@ export default function Analyze() {
 
   const saveToFirestore = async (data, isBulk = false) => {
     try {
-      if (isBulk) {
-        // Save bulk aggregated result or just skip for MVP, but let's save the summary
-        await addDoc(collection(db, 'history'), {
-          type: 'bulk',
-          total: data.total_reviews,
-          positive_percent: data.positive_percent,
-          timestamp: new Date().toISOString()
-        });
-      } else {
-        await addDoc(collection(db, 'history'), {
-          type: 'single',
-          review: review,
-          sentiment: data.sentiment,
-          department: data.department || 'General',
-          confidence: data.confidence,
-          insights: data.insights,
-          timestamp: new Date().toISOString()
-        });
+
+      const currentUser = auth.currentUser;
+
+      console.log("Current User:", currentUser);
+      console.log("UID:", currentUser?.uid);
+
+      if (!currentUser) {
+        console.error("No authenticated user found");
+        return;
       }
+
+      // =========================
+      // BULK SAVE
+      // =========================
+
+      if (isBulk) {
+
+        await addDoc(collection(db, 'history'), {
+
+          uid: currentUser.uid,
+
+          type: 'bulk',
+
+          total: data.total_reviews,
+
+          positive_percent: data.positive_percent,
+
+          negative_percent: data.negative_percent,
+
+          common_departments: data.common_departments || {},
+
+          timestamp: new Date().toISOString()
+
+        });
+
+      }
+
+      // =========================
+      // SINGLE SAVE
+      // =========================
+
+      else {
+
+        await addDoc(collection(db, 'history'), {
+
+          uid: currentUser.uid,
+
+          type: 'single',
+
+          review: review,
+
+          sentiment: data.sentiment,
+
+          department: data.department || 'General',
+
+          confidence: data.confidence,
+
+          insights: data.insights,
+
+          timestamp: new Date().toISOString()
+
+        });
+
+      }
+
+      console.log("Saved successfully to Firestore");
+
     } catch (err) {
+
       console.error("Firestore save error:", err);
-      // Non-blocking error for MVP
+
     }
   };
 
@@ -130,10 +179,10 @@ export default function Analyze() {
     setBulkAiLoading(true);
     try {
       const ctx = bulkResult.results.slice(0, 25).map(r => ({
-        review:     r.review?.substring(0, 220) || '',
-        sentiment:  r.sentiment  || 'Neutral',
+        review: r.review?.substring(0, 220) || '',
+        sentiment: r.sentiment || 'Neutral',
         department: r.department || 'General',
-        timestamp:  new Date().toISOString(),
+        timestamp: new Date().toISOString(),
       }));
       const res = await axios.post('http://localhost:8000/api/intelligence/dashboard', { context: ctx });
       setBulkIntelligence(res.data);
@@ -147,9 +196,9 @@ export default function Analyze() {
   return (
     <div className="flex-grow bg-slate-50 p-8">
       <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-8">
-        
+
         {/* Input Section */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5 }}
@@ -160,13 +209,13 @@ export default function Analyze() {
               <Send className="text-blue-500" /> Input Feedback
             </h2>
             <div className="flex bg-slate-100 p-1 rounded-xl">
-              <button 
+              <button
                 onClick={() => setMode('single')}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${mode === 'single' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
               >
                 Single
               </button>
-              <button 
+              <button
                 onClick={() => setMode('bulk')}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${mode === 'bulk' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
               >
@@ -177,13 +226,13 @@ export default function Analyze() {
 
           {mode === 'single' ? (
             <form onSubmit={handleAnalyze}>
-              <textarea 
+              <textarea
                 className="w-full h-48 p-4 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all resize-none bg-white/70 mb-6"
                 placeholder="Paste customer review here..."
                 value={review}
                 onChange={(e) => setReview(e.target.value)}
               />
-              <button 
+              <button
                 type="submit"
                 disabled={loading || !review.trim()}
                 className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-xl hover:shadow-lg hover:shadow-blue-500/30 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
@@ -203,7 +252,7 @@ export default function Analyze() {
         </motion.div>
 
         {/* Results Section */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5, delay: 0.2 }}
@@ -213,17 +262,17 @@ export default function Analyze() {
 
           {!result && !bulkResult && !loading && (
             <div className="h-full flex flex-col items-center justify-center p-8">
-              <EmptyState 
-                icon={Bot} 
-                title="Ready for Analysis" 
-                description="Results and AI insights will appear here once you submit your feedback or upload a CSV." 
+              <EmptyState
+                icon={Bot}
+                title="Ready for Analysis"
+                description="Results and AI insights will appear here once you submit your feedback or upload a CSV."
               />
             </div>
           )}
 
           {/* Single Result Rendering */}
           {result && !loading && mode === 'single' && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               className="bg-white p-8 rounded-3xl shadow-xl border border-slate-100 h-full overflow-y-auto glow"
@@ -232,11 +281,10 @@ export default function Analyze() {
                 <div>
                   <h3 className="text-slate-500 text-sm font-semibold uppercase tracking-wider mb-2">Sentiment & Dept</h3>
                   <div className="flex items-center gap-3 flex-wrap">
-                    <span className={`px-4 py-2 rounded-full text-lg font-bold flex items-center gap-2 ${
-                      result.sentiment === 'Positive' ? 'bg-green-100 text-green-700' :
+                    <span className={`px-4 py-2 rounded-full text-lg font-bold flex items-center gap-2 ${result.sentiment === 'Positive' ? 'bg-green-100 text-green-700' :
                       result.sentiment === 'Negative' ? 'bg-red-100 text-red-700' :
-                      'bg-slate-100 text-slate-700'
-                    }`}>
+                        'bg-slate-100 text-slate-700'
+                      }`}>
                       {result.sentiment === 'Positive' && <CheckCircle2 size={20} />}
                       {result.sentiment === 'Negative' && <AlertCircle size={20} />}
                       {result.sentiment}
@@ -255,7 +303,7 @@ export default function Analyze() {
                 <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
                   <Bot className="text-indigo-500" /> AI Insights <span className="text-xs font-normal text-indigo-400 bg-indigo-50 px-2 py-0.5 rounded-full ml-2 animate-pulse">Typing...</span>
                 </h3>
-                
+
                 <div className="space-y-6">
                   <div className="bg-indigo-50 p-5 rounded-2xl border border-indigo-100">
                     <h4 className="text-indigo-900 font-semibold mb-2">Summary</h4>
@@ -267,11 +315,10 @@ export default function Analyze() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                       <h4 className="text-slate-700 font-semibold mb-2 text-sm uppercase tracking-wide">Urgency</h4>
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                        result.insights.urgency === 'High' ? 'bg-red-100 text-red-700 glow-red' :
+                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${result.insights.urgency === 'High' ? 'bg-red-100 text-red-700 glow-red' :
                         result.insights.urgency === 'Medium' ? 'bg-amber-100 text-amber-700' :
-                        'bg-green-100 text-green-700'
-                      }`}>
+                          'bg-green-100 text-green-700'
+                        }`}>
                         {result.insights.urgency}
                       </span>
                     </div>
@@ -279,11 +326,11 @@ export default function Analyze() {
                       <h4 className="text-slate-700 font-semibold mb-2 text-sm uppercase tracking-wide">Key Phrases</h4>
                       <div className="flex flex-wrap gap-2">
                         {result.insights.key_phrases.map((phrase, i) => (
-                          <motion.span 
+                          <motion.span
                             initial={{ opacity: 0, scale: 0.8 }}
                             animate={{ opacity: 1, scale: 1 }}
                             transition={{ delay: i * 0.1 + 0.5 }}
-                            key={i} 
+                            key={i}
                             className="text-xs bg-white border border-slate-200 px-2 py-1 rounded-lg text-slate-600 shadow-sm"
                           >
                             {phrase}
@@ -297,11 +344,11 @@ export default function Analyze() {
                     <h4 className="text-slate-800 font-semibold mb-3">Recommended Actions</h4>
                     <ul className="space-y-3">
                       {result.insights.action_items.map((item, i) => (
-                        <motion.li 
+                        <motion.li
                           initial={{ opacity: 0, x: -10 }}
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: i * 0.2 + 1 }}
-                          key={i} 
+                          key={i}
                           className="flex items-start gap-3 text-slate-600 bg-white p-3 rounded-xl border border-slate-100 shadow-sm"
                         >
                           <div className="w-2 h-2 rounded-full bg-indigo-500 mt-2 flex-shrink-0 glow"></div>
@@ -317,7 +364,7 @@ export default function Analyze() {
 
           {/* Bulk Result Rendering */}
           {bulkResult && !loading && mode === 'bulk' && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               className="bg-white p-8 rounded-3xl shadow-xl border border-slate-100 h-full overflow-y-auto glow"
@@ -325,7 +372,7 @@ export default function Analyze() {
               <h3 className="text-2xl font-bold text-slate-800 mb-6 flex items-center gap-2">
                 <Database className="text-blue-500" /> Bulk Analysis Complete
               </h3>
-              
+
               <div className="grid grid-cols-3 gap-4 mb-8">
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center">
                   <p className="text-slate-500 text-sm font-semibold mb-1">Total</p>
