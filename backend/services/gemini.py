@@ -373,43 +373,7 @@ Return ONLY valid JSON — no markdown, no extra text:
         {review_block[:2000]}
         """
 
-        local_result = generate_local_insights(dashboard_summary)
 
-        if local_result:
-            return {
-                "executive_summary":
-                    local_result.get("summary")
-                    or f"Operational analytics processed across {total} customer reviews.",
-
-                "top_issues":
-                    local_result.get("key_phrases")
-                    or [],
-
-                "recommendations":
-                    local_result.get("action_items")
-                    or _empty["recommendations"],
-
-                "department_risk":
-                    f"Highest operational activity observed in {top_depts[0][0]} department."
-                    if top_depts else
-                    "Insufficient department data available.",
-
-                "alerts": [
-                    {
-                        "title": "Operational Signal Detected",
-                        "message": local_result.get("summary", ""),
-                        "severity": "medium" if neg_pct < 40 else "high"
-                    }
-                ],
-
-                "risk_level":
-                    "critical" if neg_pct >= 70 else
-                    "high" if neg_pct >= 40 else
-                    "medium" if neg_pct >= 20 else
-                    "low",
-            }
-
-        logger.warning("Ollama unavailable — falling back to Gemini.")
 
 
 
