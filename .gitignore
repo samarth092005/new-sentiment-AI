@@ -9,8 +9,7 @@ venv/
 # Database
 *.db
 
-# Models
-*.pkl
+
 
 # Uploads
 uploads/

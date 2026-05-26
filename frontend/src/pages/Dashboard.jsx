@@ -173,7 +173,7 @@ export default function Dashboard() {
     setAiError(false);
 
     try {
-      const res = await axios.post('http://localhost:8000/api/intelligence/dashboard', {
+      const res = await axios.post('${import.meta.env.VITE_API_URL}/api/intelligence/dashboard', {
         context: activeCtx,
       });
       // Preserve previous intelligence during retry then swap atomically
