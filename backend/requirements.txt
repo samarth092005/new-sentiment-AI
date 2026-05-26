@@ -8,3 +8,9 @@ spacy
 reportlab
 python-dotenv
 pydantic
+numpy
+pandas
+joblib
+python-multipart
+requests
+ollama

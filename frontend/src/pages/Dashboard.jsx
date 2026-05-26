@@ -21,10 +21,10 @@ import toast from 'react-hot-toast';
 const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f43f5e', '#f97316', '#eab308'];
 
 const RISK_CONFIG = {
-  low:      { label: 'Low Risk',      badge: 'bg-green-100 text-green-700',   dot: 'bg-green-400' },
-  medium:   { label: 'Moderate Risk', badge: 'bg-amber-100 text-amber-700',   dot: 'bg-amber-400' },
-  high:     { label: 'High Risk',     badge: 'bg-orange-100 text-orange-700', dot: 'bg-orange-500' },
-  critical: { label: 'Critical Risk', badge: 'bg-red-100 text-red-700',       dot: 'bg-red-500'    },
+  low: { label: 'Low Risk', badge: 'bg-green-100 text-green-700', dot: 'bg-green-400' },
+  medium: { label: 'Moderate Risk', badge: 'bg-amber-100 text-amber-700', dot: 'bg-amber-400' },
+  high: { label: 'High Risk', badge: 'bg-orange-100 text-orange-700', dot: 'bg-orange-500' },
+  critical: { label: 'Critical Risk', badge: 'bg-red-100 text-red-700', dot: 'bg-red-500' },
 };
 
 // ── Pulsing AI thinking dots ─────────────────────────────────────────────────
@@ -45,34 +45,29 @@ function ThinkingDots() {
 
 export default function Dashboard() {
   const [stats, setStats] = useState({
-    total: 1284,
-    positive: 65,
-    neutral: 20,
-    negative: 15,
-    departments: [
-      { name: 'Customer Support', value: 400 },
-      { name: 'Delivery', value: 350 },
-      { name: 'Product Quality', value: 250 },
-      { name: 'General Feedback', value: 284 }
-    ],
+    total: 0,
+    positive: 0,
+    neutral: 0,
+    negative: 0,
+    departments: [],
     trend: [
-      { name: 'Mon', positive: 40, negative: 10 },
-      { name: 'Tue', positive: 30, negative: 15 },
-      { name: 'Wed', positive: 45, negative: 5  },
-      { name: 'Thu', positive: 50, negative: 8  },
-      { name: 'Fri', positive: 65, negative: 12 },
-      { name: 'Sat', positive: 55, negative: 10 },
-      { name: 'Sun', positive: 70, negative: 5  },
+      { name: 'Mon', positive: 0, negative: 0 },
+      { name: 'Tue', positive: 0, negative: 0 },
+      { name: 'Wed', positive: 0, negative: 0 },
+      { name: 'Thu', positive: 0, negative: 0 },
+      { name: 'Fri', positive: 0, negative: 0 },
+      { name: 'Sat', positive: 0, negative: 0 },
+      { name: 'Sun', positive: 0, negative: 0 },
     ]
   });
 
-  const [loading, setLoading]             = useState(true);
+  const [loading, setLoading] = useState(true);
   const [firestoreError, setFirestoreError] = useState(false);
-  const [intelligence, setIntelligence]   = useState(null);
-  const [aiLoading, setAiLoading]         = useState(false);
-  const [aiError, setAiError]             = useState(false);
-  const [reviewContext, setReviewContext]  = useState([]);
-  const [retryCount, setRetryCount]       = useState(0);
+  const [intelligence, setIntelligence] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState(false);
+  const [reviewContext, setReviewContext] = useState([]);
+  const [retryCount, setRetryCount] = useState(0);
 
   // ── Firestore fetch ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -96,7 +91,7 @@ export default function Dashboard() {
         const snap = await getDocs(q);
         let total = 0, pos = 0, neg = 0, neu = 0;
         const depts = {};
-        const ctx   = [];
+        const ctx = [];
 
         snap.forEach((doc) => {
           const d = doc.data();
@@ -110,29 +105,50 @@ export default function Dashboard() {
 
             if (ctx.length < 25 && d.review && d.sentiment) {
               ctx.push({
-                review:     d.review.substring(0, 220),
-                sentiment:  d.sentiment,
+                review: d.review.substring(0, 220),
+                sentiment: d.sentiment,
                 department: d.department || 'General',
-                timestamp:  d.timestamp  || new Date().toISOString(),
+                timestamp: d.timestamp || new Date().toISOString(),
               });
             }
           } else if (d.type === 'bulk') {
             total += d.total || 0;
-            pos   += Math.round(((d.total || 0) * (d.positive_percent || 0)) / 100);
+            pos += Math.round(((d.total || 0) * (d.positive_percent || 0)) / 100);
           }
         });
 
         setReviewContext(ctx);
 
         if (total > 0) {
-          const formattedDepts = Object.keys(depts).map(k => ({ name: k, value: depts[k] }));
-          setStats(prev => ({
-            ...prev,
-            total:       prev.total + total,
-            positive:    Math.round(((prev.total * prev.positive / 100) + pos) / (prev.total + total) * 100),
-            negative:    Math.round(((prev.total * prev.negative / 100) + neg) / (prev.total + total) * 100),
-            departments: formattedDepts.length > 0 ? formattedDepts : prev.departments,
+          const formattedDepts = Object.keys(depts).map((k) => ({
+            name: k,
+            value: depts[k],
           }));
+
+          setStats({
+            total,
+
+            positive: Math.round((pos / total) * 100),
+
+            negative: Math.round((neg / total) * 100),
+
+            neutral: Math.round((neu / total) * 100),
+
+            departments:
+              formattedDepts.length > 0
+                ? formattedDepts
+                : [{ name: 'General Feedback', value: total }],
+
+            trend: [
+              { name: 'Mon', positive: pos, negative: neg },
+              { name: 'Tue', positive: pos, negative: neg },
+              { name: 'Wed', positive: pos, negative: neg },
+              { name: 'Thu', positive: pos, negative: neg },
+              { name: 'Fri', positive: pos, negative: neg },
+              { name: 'Sat', positive: pos, negative: neg },
+              { name: 'Sun', positive: pos, negative: neg },
+            ],
+          });
         }
       } catch (err) {
         console.error('[Dashboard] Firestore fetch failed:', err);
@@ -182,9 +198,9 @@ export default function Dashboard() {
   };
 
   const sentimentData = [
-    { name: 'Positive', value: stats.positive,                         color: '#22c55e' },
-    { name: 'Neutral',  value: 100 - stats.positive - stats.negative,  color: '#94a3b8' },
-    { name: 'Negative', value: stats.negative,                         color: '#ef4444' },
+    { name: 'Positive', value: stats.positive, color: '#22c55e' },
+    { name: 'Neutral', value: 100 - stats.positive - stats.negative, color: '#94a3b8' },
+    { name: 'Negative', value: stats.negative, color: '#ef4444' },
   ];
 
   if (loading) {
@@ -354,8 +370,8 @@ export default function Dashboard() {
         {/* ── KPI Cards ──────────────────────────────────────────────────── */}
         <div className="grid md:grid-cols-3 gap-6">
           <KpiCard title="Total Reviews Analyzed" value={stats.total.toLocaleString()} trend="+12% this week" icon={<MessageSquare className="text-blue-500" />} delay={0} />
-          <KpiCard title="Positive Sentiment"     value={`${stats.positive}%`}         trend="+2.4% this week" icon={<TrendingUp className="text-green-500" />}   delay={0.05} />
-          <KpiCard title="Active Users"           value="342"                           trend="+5% this week"   icon={<Users className="text-indigo-500" />}        delay={0.1} />
+          <KpiCard title="Positive Sentiment" value={`${stats.positive}%`} trend="+2.4% this week" icon={<TrendingUp className="text-green-500" />} delay={0.05} />
+          <KpiCard title="Active Users" value={stats.total > 0 ? "1" : "0"} trend="+5% this week" icon={<Users className="text-indigo-500" />} delay={0.1} />
         </div>
 
         {/* ── Emerging Issues + Recommendations ─────────────────────────── */}
@@ -441,8 +457,8 @@ export default function Dashboard() {
                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} />
                     <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                    <Bar dataKey="positive" fill="#3b82f6" radius={[4,4,0,0]} />
-                    <Bar dataKey="negative" fill="#ef4444" radius={[4,4,0,0]} />
+                    <Bar dataKey="positive" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="negative" fill="#ef4444" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
