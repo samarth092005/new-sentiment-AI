@@ -17,7 +17,7 @@ if not _api_key:
 genai.configure(api_key=_api_key)
 
 model = genai.GenerativeModel(
-    model_name="models/gemini-1.5-flash-latest",
+    model_name="gemini-1.5-flash-8b",
     generation_config=genai.types.GenerationConfig(
         max_output_tokens=2048,
         temperature=0.4,
