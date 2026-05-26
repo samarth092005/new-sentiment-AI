@@ -4,7 +4,6 @@ import json
 import logging
 import google.generativeai as genai
 from dotenv import load_dotenv
-from services.ollama_service import generate_local_insights
 
 load_dotenv()
 
@@ -122,18 +121,7 @@ Return ONLY valid JSON in this exact format:
 """
 
     try:
-                # ── Try Ollama first ─────────────────────────────────────
-        local_result = generate_local_insights(review)
-
-        if local_result:
-            return {
-                "summary": local_result.get("summary") or _fallback["summary"],
-                "action_items": local_result.get("action_items") or _fallback["action_items"],
-                "key_phrases": local_result.get("key_phrases") or [],
-                "urgency": local_result.get("urgency") or "Low",
-            }
-
-        logger.warning("Ollama unavailable — falling back to Gemini.")
+                
 
         response = model.generate_content(prompt, request_options=_REQUEST_OPTIONS)
         raw = _safe_text(response)
