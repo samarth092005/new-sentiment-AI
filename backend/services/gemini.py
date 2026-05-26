@@ -315,8 +315,11 @@ def generate_dashboard_intelligence(context: list) -> dict:
     date_range = f"{min(ts)} to {max(ts)}" if ts else "Unknown"
 
     review_block = "\n".join(
-        f"[{i}] {item.get('sentiment','N/A')} | {item.get('department','General')} | \"{item.get('review','')[:90]}\""
-        for i, item in enumerate(context[:8], 1)
+    f"[{i}] {item.get('sentiment','N/A')} | "
+    f"{item.get('department','General')} | "
+    f"\"{item.get('review','')[:50]}\""
+    for i, item in enumerate(context[:5], 1)
+
     )
 
     prompt = f"""SYSTEM ROLE:
@@ -344,7 +347,12 @@ Negative % : {neg_pct}% | Positive %: {pos_pct}%
 REVIEWS:
 {review_block}
 
-Return ONLY valid JSON — no markdown, no extra text:
+Return STRICTLY VALID RAW JSON ONLY.
+Do not use markdown.
+Do not use code blocks.
+Do not add explanations before or after the JSON.
+Response must begin with {{ and end with }}.
+
 {{
   "executive_summary": "2-3 sentence executive intelligence summary",
   "top_issues": ["Issue 1", "Issue 2", "Issue 3"],
