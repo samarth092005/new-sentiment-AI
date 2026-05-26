@@ -19,7 +19,7 @@ genai.configure(api_key=_api_key)
 model = genai.GenerativeModel(
     model_name="gemini-2.5-flash",
     generation_config=genai.types.GenerationConfig(
-        max_output_tokens=1024,
+        max_output_tokens=2048,
         temperature=0.4,
     ),
 )
@@ -315,7 +315,7 @@ def generate_dashboard_intelligence(context: list) -> dict:
     date_range = f"{min(ts)} to {max(ts)}" if ts else "Unknown"
 
     review_block = "\n".join(
-        f"[{i}] {item.get('sentiment','N/A')} | {item.get('department','General')} | \"{item.get('review','')[:180]}\""
+        f"[{i}] {item.get('sentiment','N/A')} | {item.get('department','General')} | \"{item.get('review','')[:90]}\""
         for i, item in enumerate(context, 1)
     )
 
