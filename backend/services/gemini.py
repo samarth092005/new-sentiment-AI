@@ -316,7 +316,7 @@ def generate_dashboard_intelligence(context: list) -> dict:
 
     review_block = "\n".join(
         f"[{i}] {item.get('sentiment','N/A')} | {item.get('department','General')} | \"{item.get('review','')[:90]}\""
-        for i, item in enumerate(context, 1)
+        for i, item in enumerate(context[:8], 1)
     )
 
     prompt = f"""SYSTEM ROLE:
