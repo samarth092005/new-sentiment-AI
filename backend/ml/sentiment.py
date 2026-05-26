@@ -56,8 +56,6 @@ class SentimentAnalyzer:
             "terrible",
             "refund",
             "broken",
-            "issue",
-            "problem",
             "poor",
             "angry",
             "complaint",
@@ -69,7 +67,6 @@ class SentimentAnalyzer:
             "useless",
             "frustrating",
             "failed",
-            "error",
             "bug",
             "crash",
             "not working",
@@ -122,27 +119,60 @@ class SentimentAnalyzer:
             "functional"
         ]
 
-        # Hybrid AI + Rule Logic
+        # ── Hybrid AI + Rule-Based Intelligence ───────────────────────────
 
-        # Negative gets highest priority
-        if any(word in text_lower for word in negative_keywords):
-            prediction = "Negative"
-            confidence = max(confidence, 0.85)
+        # Count keyword matches
+        negative_score = sum(
+            1 for word in negative_keywords if word in text_lower
+        )
 
-        # Positive second priority
-        elif any(word in text_lower for word in positive_keywords):
+        positive_score = sum(
+            1 for word in positive_keywords if word in text_lower
+        )
+
+        neutral_score = sum(
+            1 for word in neutral_keywords if word in text_lower
+        )
+
+        # ML fallback mapping
+        # Handles cases where sklearn returns numeric labels
+        if isinstance(prediction, (int, np.integer)):
+
+            label_map = {
+                0: "Negative",
+                1: "Neutral",
+                2: "Positive"
+            }
+
+            prediction = label_map.get(prediction, "Neutral")
+
+        # ── Hybrid decision engine ───────────────────────────────────────
+
+        # Strong positive signal
+        if positive_score > negative_score:
             prediction = "Positive"
             confidence = max(confidence, 0.85)
 
+        # Strong negative signal
+        elif negative_score > positive_score:
+            prediction = "Negative"
+            confidence = max(confidence, 0.85)
+
         # Neutral fallback
-        elif any(word in text_lower for word in neutral_keywords):
+        elif neutral_score > 0:
             prediction = "Neutral"
             confidence = max(confidence, 0.75)
+
+        # If scores tie, preserve ML prediction
+        else:
+            prediction = str(prediction)
+
+        # Normalize confidence
+        confidence = round(min(confidence, 0.99), 3)
 
         return {
             "sentiment": prediction,
             "confidence": confidence
         }
-
 
 analyzer = SentimentAnalyzer()

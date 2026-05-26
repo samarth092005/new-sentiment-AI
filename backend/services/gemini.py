@@ -46,24 +46,35 @@ def _classify_error(e: Exception) -> str:
 
 def _extract_json(raw: str) -> dict | None:
     """
-    Attempt to extract a JSON object from raw text even when markdown
-    wrappers are present or the model adds prose before/after the JSON.
-    Returns a parsed dict or None.
+    Extract valid JSON from Gemini responses safely.
+    Handles markdown wrappers, partial prose, and malformed formatting.
     """
-    # Strip common markdown fences
-    cleaned = raw.replace("```json", "").replace("```", "").strip()
-    # Try direct parse first
+
+    if not raw:
+        return None
+
+    # Remove markdown fences
+    cleaned = re.sub(r"```json\s*", "", raw)
+    cleaned = re.sub(r"```", "", cleaned).strip()
+
+    # Try direct parse
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
         pass
-    # Regex fallback — grab first {...} block
-    match = re.search(r"\{[\s\S]+\}", cleaned)
-    if match:
+
+    # Find first valid JSON object
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+
+    if start != -1 and end != -1 and end > start:
+        candidate = cleaned[start:end + 1]
+
         try:
-            return json.loads(match.group())
-        except json.JSONDecodeError:
-            pass
+            return json.loads(candidate)
+        except json.JSONDecodeError as e:
+            logger.warning("_extract_json failed: %s", e)
+
     return None
 
 
@@ -117,6 +128,9 @@ Return ONLY valid JSON in this exact format:
             return _fallback
 
         parsed = _extract_json(raw)
+        print("\nRAW GEMINI RESPONSE:\n", raw)
+        print("\nPARSED RESULT:\n", parsed)
+
         if not parsed:
             logger.warning("generate_insights: JSON parse failed; using fallback. raw=%s", raw[:200])
             return _fallback

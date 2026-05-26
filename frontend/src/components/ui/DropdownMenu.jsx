@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { User, Settings, LogOut } from 'lucide-react';
 import { auth } from '../../firebase/config';
 import { signOut } from 'firebase/auth';
@@ -10,6 +10,7 @@ export default function DropdownMenu() {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -25,7 +26,7 @@ export default function DropdownMenu() {
 
   const handleLogout = async () => {
     await signOut(auth);
-    window.location.href = "/login";
+    window.location.href = "/";
   };
 
   const getInitials = (email) => {
@@ -35,7 +36,7 @@ export default function DropdownMenu() {
 
   return (
     <div className="relative" ref={dropdownRef}>
-      <button 
+      <button
         onClick={() => setIsOpen(!isOpen)}
         className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold shadow-md hover:shadow-lg transition-all border-2 border-white ring-2 ring-transparent hover:ring-blue-100"
       >

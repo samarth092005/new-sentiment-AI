@@ -6,7 +6,7 @@ import { collection, getDocs, query, orderBy, limit, where } from 'firebase/fire
 import { db, auth } from '../firebase/config';
 import {
   User, Mail, Calendar, Activity, TrendingUp, AlertTriangle,
-  Edit2, Check, X, FileText, Database, BrainCircuit, Clock
+  Edit2, Check, X, FileText, Database, BrainCircuit, Clock ,Building2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -214,49 +214,181 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* Name + email */}
-          <div className="mb-6">
-            <AnimatePresence mode="wait">
-              {editing ? (
-                <motion.div
-                  key="edit"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="flex items-center gap-2 mb-1"
-                >
-                  <input
-                    value={displayName}
-                    onChange={e => setDisplayName(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleSaveName()}
-                    autoFocus
-                    className="text-xl font-bold text-slate-800 border-b-2 border-blue-500 outline-none bg-transparent w-64 pb-0.5"
-                    placeholder="Display name"
-                  />
-                  <button onClick={handleSaveName} disabled={saving}
-                    className="p-1.5 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50">
-                    {saving ? <span className="animate-spin block w-4 h-4 border-2 border-white border-t-transparent rounded-full" /> : <Check size={15} />}
-                  </button>
-                  <button onClick={cancelEdit}
-                    className="p-1.5 bg-slate-200 text-slate-600 rounded-lg hover:bg-slate-300 transition-colors">
-                    <X size={15} />
-                  </button>
-                </motion.div>
-              ) : (
-                <motion.div key="view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 mb-1">
-                  <h2 className="text-2xl font-bold text-slate-800">{user?.displayName || 'Emovix User'}</h2>
-                  <button onClick={() => setEditing(true)}
-                    className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit name">
-                    <Edit2 size={15} />
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-slate-500 text-sm">
-              <span className="flex items-center gap-1.5"><Mail size={14} /> {user?.email}</span>
-              <span className="flex items-center gap-1.5"><Calendar size={14} /> Joined {joinDate}</span>
-            </div>
+{/* Name + Professional Identity */}
+<div className="mb-6">
+
+  {/* Professional State */}
+  {(() => {
+    if (!localStorage.getItem('profile_company')) {
+      localStorage.setItem('profile_company', '');
+    }
+
+    if (!localStorage.getItem('profile_role')) {
+      localStorage.setItem('profile_role', '');
+    }
+
+    if (!localStorage.getItem('profile_bio')) {
+      localStorage.setItem('profile_bio', '');
+    }
+
+    return null;
+  })()}
+
+  <AnimatePresence mode="wait">
+
+    {editing ? (
+
+      <motion.div
+        key="edit"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="space-y-4"
+      >
+
+        {/* Name */}
+        <div className="flex items-center gap-2 flex-wrap">
+
+          <input
+            value={displayName}
+            onChange={e => setDisplayName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleSaveName()}
+            autoFocus
+            className="text-xl font-bold text-slate-800 border-b-2 border-blue-500 outline-none bg-transparent w-64 pb-0.5"
+            placeholder="Display name"
+          />
+
+          <button
+            onClick={handleSaveName}
+            disabled={saving}
+            className="p-1.5 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
+          >
+
+            {saving ? (
+              <span className="animate-spin block w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+            ) : (
+              <Check size={15} />
+            )}
+
+          </button>
+
+          <button
+            onClick={cancelEdit}
+            className="p-1.5 bg-slate-200 text-slate-600 rounded-lg hover:bg-slate-300 transition-colors"
+          >
+            <X size={15} />
+          </button>
+
+        </div>
+
+        {/* Role */}
+        <input
+          defaultValue={localStorage.getItem('profile_role') || ''}
+          onChange={(e) =>
+            localStorage.setItem('profile_role', e.target.value)
+          }
+          placeholder="Role / Designation"
+          className="w-full sm:w-80 px-4 py-2.5 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all text-sm"
+        />
+
+        {/* Company */}
+        <input
+          defaultValue={localStorage.getItem('profile_company') || ''}
+          onChange={(e) =>
+            localStorage.setItem('profile_company', e.target.value)
+          }
+          placeholder="Company / Organization"
+          className="w-full sm:w-80 px-4 py-2.5 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all text-sm"
+        />
+
+        {/* Bio */}
+        <textarea
+          defaultValue={localStorage.getItem('profile_bio') || ''}
+          onChange={(e) =>
+            localStorage.setItem('profile_bio', e.target.value)
+          }
+          placeholder="Professional focus or operational responsibility..."
+          rows={3}
+          className="w-full max-w-xl px-4 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all text-sm resize-none"
+        />
+
+      </motion.div>
+
+    ) : (
+
+      <motion.div
+        key="view"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+      >
+
+        {/* Name */}
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
+
+          <h2 className="text-2xl font-bold text-slate-800">
+            {user?.displayName || 'Emovix User'}
+          </h2>
+
+          <button
+            onClick={() => setEditing(true)}
+            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            title="Edit profile"
+          >
+            <Edit2 size={15} />
+          </button>
+
+        </div>
+
+        {/* Role + Company */}
+        {(localStorage.getItem('profile_role') ||
+          localStorage.getItem('profile_company')) && (
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600 mb-3">
+
+            {localStorage.getItem('profile_role') && (
+              <span className="flex items-center gap-1.5 font-medium">
+                <User size={14} />
+                {localStorage.getItem('profile_role')}
+              </span>
+            )}
+
+            {localStorage.getItem('profile_company') && (
+              <span className="flex items-center gap-1.5">
+                <Building2 size={14} />
+                {localStorage.getItem('profile_company')}
+              </span>
+            )}
+
           </div>
+        )}
+
+        {/* Bio */}
+        {localStorage.getItem('profile_bio') && (
+          <p className="text-sm text-slate-500 leading-relaxed max-w-2xl mb-4">
+            {localStorage.getItem('profile_bio')}
+          </p>
+        )}
+
+        {/* Meta */}
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-slate-500 text-sm">
+
+          <span className="flex items-center gap-1.5">
+            <Mail size={14} />
+            {user?.email}
+          </span>
+
+          <span className="flex items-center gap-1.5">
+            <Calendar size={14} />
+            Joined {joinDate}
+          </span>
+
+        </div>
+
+      </motion.div>
+    )}
+
+  </AnimatePresence>
+</div>
 
           {/* Stats grid */}
           <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4">Usage Statistics</h3>
