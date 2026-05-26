@@ -17,7 +17,7 @@ if not _api_key:
 genai.configure(api_key=_api_key)
 
 model = genai.GenerativeModel(
-    model_name="gemini-1.5-flash",
+    model_name="gemini-2.5-flash",
     generation_config=genai.types.GenerationConfig(
         max_output_tokens=2048,
         temperature=0.4,
@@ -271,16 +271,19 @@ Deliver a sharp, executive-grade intelligence response:"""
 
 def generate_dashboard_intelligence(context: list) -> dict:
     """
-    Emovix AI Dashboard Intelligence Engine.
-    Always returns a complete, valid dict — never raises.
+    Emovix Analytics Intelligence Engine.
+    Stable dashboard intelligence without Gemini dependency.
     """
+
     _empty = {
         "executive_summary": (
             "No review data is currently available. Analyze customer feedback "
-            "to unlock AI-powered operational intelligence."
+            "to unlock operational intelligence."
         ),
         "top_issues": [],
-        "recommendations": ["Process customer reviews to generate operational recommendations."],
+        "recommendations": [
+            "Process customer reviews to generate operational recommendations."
+        ],
         "department_risk": "Insufficient data to assess department risk.",
         "alerts": [],
         "risk_level": "low",
@@ -291,147 +294,143 @@ def generate_dashboard_intelligence(context: list) -> dict:
 
     total = len(context)
 
-    sent_counts: dict = {}
+    # ── Sentiment Counts ─────────────────────────────────
+    sent_counts = {}
+
     for item in context:
-        s = item.get("sentiment", "Unknown")
-        sent_counts[s] = sent_counts.get(s, 0) + 1
+        sentiment = item.get("sentiment", "Unknown")
+        sent_counts[sentiment] = sent_counts.get(sentiment, 0) + 1
 
     neg_pct = round(sent_counts.get("Negative", 0) / total * 100)
     pos_pct = round(sent_counts.get("Positive", 0) / total * 100)
-    sentiment_summary = ", ".join(
-        f"{s}: {c} ({round(c/total*100)}%)"
-        for s, c in sorted(sent_counts.items(), key=lambda x: -x[1])
-    )
 
-    dept_counts: dict = {}
+    # ── Risk Level ───────────────────────────────────────
+    if neg_pct >= 50:
+        risk_level = "critical"
+    elif neg_pct >= 30:
+        risk_level = "high"
+    elif neg_pct >= 15:
+        risk_level = "medium"
+    else:
+        risk_level = "low"
+
+    # ── Department Counts ────────────────────────────────
+    dept_counts = {}
+
     for item in context:
-        d = item.get("department", "General")
-        dept_counts[d] = dept_counts.get(d, 0) + 1
+        dept = item.get("department", "General")
+        dept_counts[dept] = dept_counts.get(dept, 0) + 1
 
-    top_depts = sorted(dept_counts.items(), key=lambda x: -x[1])
-    dept_summary = ", ".join(f"{d} ({c})" for d, c in top_depts[:5])
-
-    ts = [item.get("timestamp", "")[:10] for item in context if item.get("timestamp")]
-    date_range = f"{min(ts)} to {max(ts)}" if ts else "Unknown"
-
-    review_block = "\n".join(
-    f"[{i}] {item.get('sentiment','N/A')} | "
-    f"{item.get('department','General')} | "
-    f"\"{item.get('review','')[:50]}\""
-    for i, item in enumerate(context[:5], 1)
-
+    top_depts = sorted(
+        dept_counts.items(),
+        key=lambda x: x[1],
+        reverse=True
     )
 
-    prompt = f"""SYSTEM ROLE:
-You are the Emovix Dashboard Intelligence Engine — a senior customer analytics AI that generates executive-grade business intelligence from review data.
+    top_department = top_depts[0][0] if top_depts else "General"
 
-TASK:
-Analyze the customer review dataset and return a complete intelligence report as valid JSON.
+    department_risk = (
+        f"{top_department} department showing elevated complaint activity "
+        f"based on recent customer feedback trends."
+    )
 
-QUALITY STANDARDS:
-- Be specific and grounded — reference actual complaint themes visible in the reviews.
-- Sound like a senior analyst briefing an executive team.
-- Identify the top 3–5 real complaint categories present in the data.
-- Generate specific, actionable operational recommendations.
-- Flag genuine risks — do not downplay high negative rates.
-- If negative sentiment > 30%, risk_level should be "high" or "critical".
-- Alerts should be specific and reference actual patterns from the reviews.
-- Severity: "low" | "medium" | "high" | "critical"
-- Do NOT add generic filler — every sentence must reflect actual data.
+    # ── Issue Detection ──────────────────────────────────
+    issue_keywords = {
+        "Delivery Delays": ["delay", "late", "shipping"],
+        "Damaged Products": ["damaged", "broken", "defective"],
+        "Poor Support": ["support", "ignored", "response"],
+        "Refund Problems": ["refund", "return"],
+        "Packaging Issues": ["packaging", "box"],
+    }
 
-DATASET ({total} reviews | {date_range}):
-Sentiment  : {sentiment_summary}
-Departments: {dept_summary}
-Negative % : {neg_pct}% | Positive %: {pos_pct}%
+    issue_counts = {}
 
-REVIEWS:
-{review_block}
+    for item in context:
+        review = item.get("review", "").lower()
 
-Return STRICTLY VALID RAW JSON ONLY.
-Do not use markdown.
-Do not use code blocks.
-Do not add explanations before or after the JSON.
-Response must begin with {{ and end with }}.
+        for issue, keywords in issue_keywords.items():
+            if any(keyword in review for keyword in keywords):
+                issue_counts[issue] = issue_counts.get(issue, 0) + 1
 
-{{
-  "executive_summary": "2-3 sentence executive intelligence summary",
-  "top_issues": ["Issue 1", "Issue 2", "Issue 3"],
-  "recommendations": ["Recommendation 1", "Recommendation 2", "Recommendation 3"],
-  "department_risk": "Short sentence on highest-risk department and why",
-  "alerts": [
-    {{"title": "Alert title", "message": "Specific alert detail", "severity": "high"}},
-    {{"title": "Alert title", "message": "Specific alert detail", "severity": "medium"}}
-  ],
-  "risk_level": "medium"
-}}"""
+    top_issues = sorted(
+        issue_counts,
+        key=issue_counts.get,
+        reverse=True
+    )[:3]
+
+    # ── Recommendations ──────────────────────────────────
+    recommendations = []
+
+    if "Delivery Delays" in top_issues:
+        recommendations.append(
+            "Investigate logistics bottlenecks and delayed delivery operations."
+        )
+
+    if "Damaged Products" in top_issues:
+        recommendations.append(
+            "Review packaging and product handling quality assurance processes."
+        )
+
+    if "Poor Support" in top_issues:
+        recommendations.append(
+            "Improve customer support response workflows and escalation handling."
+        )
+
+    if "Refund Problems" in top_issues:
+        recommendations.append(
+            "Optimize refund and return resolution workflows."
+        )
+
+    if not recommendations:
+        recommendations.append(
+            "Continue monitoring customer sentiment trends across departments."
+        )
+
+    # ── Alerts ───────────────────────────────────────────
+    alerts = []
+
+    if neg_pct >= 40:
+        alerts.append({
+            "title": "Negative Sentiment Spike",
+            "message": f"{neg_pct}% of recent reviews reflect negative sentiment.",
+            "severity": "high"
+        })
+
+    if "Poor Support" in top_issues:
+        alerts.append({
+            "title": "Support Complaints Increasing",
+            "message": "Customer support responsiveness issues are recurring.",
+            "severity": "medium"
+        })
+
+    if "Damaged Products" in top_issues:
+        alerts.append({
+            "title": "Product Quality Risk",
+            "message": "Customers are repeatedly reporting damaged products.",
+            "severity": "high"
+        })
+
+    # ── Executive Summary ────────────────────────────────
+    issues_text = (
+        ", ".join(top_issues)
+        if top_issues
+        else "general operational concerns"
+    )
+
+    executive_summary = (
+        f"{neg_pct}% of recent customer feedback reflects negative sentiment, "
+        f"primarily impacting the {top_department} department. "
+        f"Most recurring issues include {issues_text}."
+    )
+
+    # ── Final Dashboard Intelligence ─────────────────────
+    return {
+        "executive_summary": executive_summary,
+        "top_issues": top_issues,
+        "recommendations": recommendations,
+        "department_risk": department_risk,
+        "alerts": alerts,
+        "risk_level": risk_level,
+    }
 
     
-
-    try:
-                # ── Try Ollama first ─────────────────────────────────────
-        dashboard_summary = f"""
-        Total Reviews: {total}
-        Negative Reviews: {neg_pct}%
-        Positive Reviews: {pos_pct}%
-
-        Department Breakdown:
-        {dept_summary}
-
-        Review Samples:
-        {review_block[:2000]}
-        """
-
-
-
-
-
-        response = model.generate_content(prompt, request_options=_REQUEST_OPTIONS)
-        raw = _safe_text(response)
-        if not raw:
-            logger.warning("generate_dashboard_intelligence: empty Gemini response.")
-            _empty["executive_summary"] = (
-                f"AI Intelligence Engine is temporarily operating at reduced capacity. "
-                f"Core analytics across {total} records remain available."
-            )
-            return _empty
-
-        parsed = _extract_json(raw)
-        if not parsed:
-            logger.warning("generate_dashboard_intelligence: JSON parse failed. raw=%s", raw[:200])
-            _empty["executive_summary"] = (
-                f"AI Intelligence Engine returned a malformed response. "
-                f"Manual review of {total} records recommended while AI recovers."
-            )
-            return _empty
-
-        # Validate + fill missing keys
-        return {
-            "executive_summary": parsed.get("executive_summary") or _empty["executive_summary"],
-            "top_issues":        parsed.get("top_issues") or [],
-            "recommendations":   parsed.get("recommendations") or _empty["recommendations"],
-            "department_risk":   parsed.get("department_risk") or _empty["department_risk"],
-            "alerts":            parsed.get("alerts") or [],
-            "risk_level":        parsed.get("risk_level") or "low",
-        }
-
-    except Exception as e:
-        reason = _classify_error(e)
-        logger.error("generate_dashboard_intelligence failed [%s]: %s", reason, e)
-
-        if reason == "quota_exceeded":
-            _empty["executive_summary"] = (
-                "AI Intelligence Engine has reached its current capacity limit. "
-                f"Core analytics across {total} reviews remain available. "
-                "Advanced insights will resume automatically when capacity is restored."
-            )
-        elif reason == "timeout":
-            _empty["executive_summary"] = (
-                f"AI Intelligence Engine timed out while processing {total} reviews. "
-                "Core operational metrics remain fully available. Please retry the intelligence report."
-            )
-        else:
-            _empty["executive_summary"] = (
-                "AI Intelligence Engine is temporarily operating at reduced capacity. "
-                f"Core analytics across {total} reviews remain available while advanced insights recover."
-            )
-        return _empty
