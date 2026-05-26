@@ -123,7 +123,7 @@ export default function Assistant() {
     }
 
     try {
-      const res = await axios.post('${import.meta.env.VITE_API_URL}/api/assistant/query', {
+      const res = await axios.post(`${import.meta.env.VITE_API_URL}/api/assistant/query`, {
         query:   trimmed,
         context: reviewContext,
       });

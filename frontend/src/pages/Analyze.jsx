@@ -90,7 +90,7 @@ export default function Analyze() {
     setBulkResult(null);
 
     try {
-      const response = await axios.post('${import.meta.env.VITE_API_URL}/api/analyze', { review });
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/analyze`, { review });
       setResult(response.data);
       // Save to Firestore — fire-and-forget, non-blocking
       saveToFirestore(response.data, false, review).then(() => {
@@ -120,7 +120,7 @@ export default function Analyze() {
     setBulkAiError(false);
 
     try {
-      const response = await axios.post('${import.meta.env.VITE_API_URL}/api/analyze/bulk', { reviews });
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/analyze/bulk`, { reviews });
       setBulkResult(response.data);
       // Fire-and-forget save
       saveToFirestore(response.data, true).then(() => {
@@ -152,7 +152,7 @@ export default function Analyze() {
         department: r.department || 'General',
         timestamp:  new Date().toISOString(),
       }));
-      const res = await axios.post('${import.meta.env.VITE_API_URL}/api/intelligence/dashboard', { context: ctx });
+      const res = await axios.post(`${import.meta.env.VITE_API_URL}/api/intelligence/dashboard`, { context: ctx });
       setBulkIntelligence(res.data);
     } catch (err) {
       console.error('[Analyze] Bulk intelligence request failed:', err);
