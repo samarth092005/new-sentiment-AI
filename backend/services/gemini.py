@@ -192,12 +192,12 @@ def generate_assistant_response(query: str, context: list) -> str:
     date_range = f"{min(timestamps)} to {max(timestamps)}" if timestamps else "Unknown"
 
     review_lines = []
-    for idx, item in enumerate(context, 1):
+    for idx, item in enumerate(context[:5], 1):
         review_lines.append(
             f"[{idx}] {item.get('sentiment', 'N/A')} | "
             f"{item.get('department', 'General')} | "
             f"{item.get('timestamp', '')[:10]} | "
-            f"\"{item.get('review', '')[:220]}\""
+            f"\"{item.get('review', '')[:120]}\""
         )
     review_block = "\n".join(review_lines)
 
